@@ -6,10 +6,6 @@ Talk: https://sched.co/ekHe
 
 [[https://nats.io][NATS]] is high performance cloud native messaging system that allows you to build globally available and secure applications based on streams and services that are both fast and simple to operate. In this talk you will learn: how to get started with NATS streams and services, about the *NATS Adaptive Edge Architecture* to span clusters across different networks and clusters using leafnodes and gateway connections, followed by a deep dive into the latest features such as its JetStream persistence engine as well as how to deploy and operating NATS in Kubernetes.
 
-*You can watch the tutorial by clicking on the image below*:
-
-[[https://www.youtube.com/watch?v=kN-GbWRVFos][https://img.youtube.com/vi/kN-GbWRVFos/maxresdefault.jpg]]
-
 * Checkout the repo
 
 Follow along with this repo: https://github.com/nats-io/kubecon2020

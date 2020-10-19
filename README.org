@@ -1,4 +1,4 @@
-#+TITLE: Tutorial: Building Secure & Decentralized Global Applications on Kubernetes with NATS
+#+TITLE: NATS Streams and Services: From Zero to Hero
 
 /KubeCon 2020: NATS Streams and Services: From Zero to Hero/
 

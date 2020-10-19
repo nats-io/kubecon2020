@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nats-io/jwt"
+	jwt "github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
 )
@@ -67,7 +67,7 @@ func main() {
 	// Connect to NATS
 	nc, err := nats.Connect(*server, opts...)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("Failed to connect to NATS:", err)
 	}
 	log.SetFlags(log.LstdFlags)
 	log.Print("Connected to NATS System")

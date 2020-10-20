@@ -1,11 +1,11 @@
-#+TITLE: Tutorial: Building Secure & Decentralized Global Applications on Kubernetes with NATS
+#+TITLE: NATS Streams and Services: From Zero to Hero
 
 * Checkout the repo
 
-Follow along with this repo: https://github.com/wallyqs/kubecon2020
+Follow along with this repo: https://github.com/nats-io/kubecon2020
 
 #+begin_src sh
-git clone https://github.com/wallyqs/kubecon2020
+git clone https://github.com/nats-io/kubecon2020
 #+end_src
 
 * Setup decentralized auth
@@ -31,64 +31,101 @@ tree nsc/ | less
 nsc describe jwt -f nsc/accounts/nats/KO/KO.jwt 
 #+end_src
 
-** Creating the KUBECON account
+** Creating the accounts
+
+- We will separate the system into two accounts:
+  + An ADMIN account for management of users (create/revoke)
+  + An CHAT account for the users to interact with each other.
 
 - We need 3 users at least:
-  + Chat Credentials Requestor
-  + Credentials Provisioner
-  + Chat User :: Will be dynamically generated
+  + Admin User          :: Credentials Provisioner and revocation
+  + Chat User           :: Dynamically generated
+  + Bootstrap User      :: Chat Credentials Requestor
 
 #+begin_src sh
-nsc add account --name KUBECON
+nsc add account --name CHAT
+nsc add account --name ADMIN
 nsc list accounts
-nsc describe jwt -f ./nsc/accounts/nats/KO/accounts/KUBECON/KUBECON.jwt
+nsc describe jwt -f ./nsc/accounts/nats/KO/accounts/CHAT/CHAT.jwt
+nsc describe jwt -f ./nsc/accounts/nats/KO/accounts/ADMIN/ADMIN.jwt
 #+end_src
 
-** Add a new signing key for KUBECON account
+** Add a new signing key for CHAT and ADMIN accounts
 
 This is needed to be able to create users dynamically by the credentials provisioner.
 
 #+begin_src sh
-nsc generate nkey --account --store 
-nsc edit account --sk ACUIKNKJIAPABWJSIJM4GFYLQLL7RUWEBI2BIZYUINPWV5432ZOAEDV4
-nsc describe jwt -f ./nsc/accounts/nats/KO/accounts/KUBECON/KUBECON.jwt
+$ nsc generate nkey --account CHAT --store
+ADCQ6MQXSOSLMFIW7J6EDLJO2NCQIH4C44YR3MOWS6QLQYQFDV2UXBHH
+account key stored /Users/wallyqs/repos/nats-dev/src/github.com/nats-io/kubecon2020/nsc/nkeys/keys/A/DC/ADCQ6MQXSOSLMFIW7J6EDLJO2NCQIH4C44YR3MOWS6QLQYQFDV2UXBHH.nk
+
+# 
+# This signing key will be used to create users
+# 
+$ nsc edit account -n CHAT --sk ADCQ6MQXSOSLMFIW7J6EDLJO2NCQIH4C44YR3MOWS6QLQYQFDV2UXBHH
+[ OK ] added signing key "ADCQ6MQXSOSLMFIW7J6EDLJO2NCQIH4C44YR3MOWS6QLQYQFDV2UXBHH"
+[ OK ] edited account "CHAT"
+
+$ nsc generate nkey --account ADMIN --store 
+AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN
+account key stored /Users/wallyqs/repos/nats-dev/src/github.com/nats-io/kubecon2020/nsc/nkeys/keys/A/AE/AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN.nk
+
+$ nsc edit account -n ADMIN --sk AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN
+[ OK ] added signing key "AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN"
+[ OK ] edited account "ADMIN"
+
+$ nsc describe jwt -f ./nsc/accounts/nats/KO/accounts/CHAT/CHAT.jwt | grep Signing
+│ Signing Keys              │ ADCQ6MQXSOSLMFIW7J6EDLJO2NCQIH4C44YR3MOWS6QLQYQFDV2UXBHH │
+
+$ nsc describe jwt -f ./nsc/accounts/nats/KO/accounts/ADMIN/ADMIN.jwt | grep Signing
+│ Signing Keys              │ AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN │
 #+end_src
 
 ** Create user for the credentials provisioner
 
-#+begin_src 
-nsc add user chat-access \
-   -K $NKEYS_PATH/keys/A/AO/AAOEOFBQCJKEJ7XZLLSHKVCERH34OPZOIJMOUUVW7QKESQ2KT33JZDRI.nk \
-   --allow-sub 'chat.req.access' \
-   --allow-pubsub '_INBOX.>' \
-   --allow-pubsub '_R_' \
-   --allow-pubsub '_R_.>'
+This is in the ADMIN account, a user that is able to provision credentials.
 
-nsc describe jwt -f $NKEYS_PATH/creds/KO/KUBECON/chat-access.creds
+#+begin_src 
+$ nsc add user -a ADMIN chat-access \
+   -K $NKEYS_PATH/keys/A/AE/AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN.nk \
+   --allow-sub 'chat.req.access' \
+   --allow-pub-response
+[ OK ] generated and stored user key "UALGE5RGSDC3DC4DWIO2KU6Y2R35F6UWKD4GGDBL3TTMXROPKKAPRZBQ"
+[ OK ] generated user creds file `~/repos/nats-dev/src/github.com/nats-io/kubecon2020/nsc/nkeys/creds/KO/ADMIN/chat-access.creds`
+[ OK ] added user "chat-access" to account "ADMIN"
+
+$ nsc describe jwt -f $NKEYS_PATH/creds/KO/ADMIN/chat-access.creds
 #+end_src
 
 ** Create user for the credentials request
 
-#+begin_src 
-nsc add user chat-creds-request \
-   -K $NKEYS_PATH/keys/A/AO/AAOEOFBQCJKEJ7XZLLSHKVCERH34OPZOIJMOUUVW7QKESQ2KT33JZDRI.nk \
-   --allow-pub 'chat.req.access' \
-   --allow-pubsub '_INBOX.>' \
-   --allow-pubsub '_R_' \
-   --allow-pubsub '_R_.>'
+This is a bootstrapping user shared by everyone, like a guest user.
 
-nsc describe jwt -f $NKEYS_PATH/creds/KO/KUBECON/chat-creds-request.creds
+#+begin_src 
+$ nsc add user -a ADMIN chat-creds-request \
+   -K $NKEYS_PATH/keys/A/AE/AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN.nk \
+   --allow-pub 'chat.req.access'
+
+$ nsc describe jwt -f $NKEYS_PATH/creds/KO/ADMIN/chat-creds-request.creds
 #+end_src
 
-** Confirm setup locally
+** Add the export and import
+
+#+begin_src 
+nsc add export -a ADMIN --service -n chat-access  -s chat.req.access 
+nsc add import -a CHAT  --service --src-account $(nsc list accounts 2>&1 | grep ADMIN | awk '{print $4}') -n chat-access --remote-subject chat.req.access   -s chat.req.access
+#+end_src
+
+** Setting up the NATS Server locally
 
 Generate the NATS configuration.
 
 #+begin_src sh :results output
 source .nsc.env 
 nsc list accounts
-nsc generate config --mem-resolver --sys-account SYS
-nsc generate config --mem-resolver --sys-account SYS > conf/resolver.conf
+mkdir conf jwt
+nsc generate config --sys-account SYS --nats-resolver > conf/resolver.conf
+cat conf/resolver.conf
 #+end_src
 
 Start the NATS Server:
@@ -97,35 +134,72 @@ Start the NATS Server:
 nats-server -c conf/resolver.conf
 #+end_src
 
-Try to make a request:
-
-#+begin_src 
-nats-req -creds nsc/nkeys/creds/KO/KUBECON/chat-creds-request.creds chat.req.access example
-#+end_src
-
-Create a mock responder:
+Upload the accounts:
 
 #+begin_src sh
-nats-rply -creds nsc/nkeys/creds/KO/KUBECON/chat-access.creds chat.req.access example
+nats-req -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep CHAT  | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/CHAT/CHAT.jwt)
+
+# FIXME: workaround to prevent colors matching in the line below.
+rm ./nsc/accounts/nsc.json
+
+nats-req -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep ADMIN | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/ADMIN/ADMIN.jwt)
+#+end_src
+
+** Smoke test
+
+Create a mock admin responder:
+
+#+begin_src sh
+nats-rply -creds $NKEYS_PATH/creds/KO/ADMIN/chat-access.creds chat.req.access example
+#+end_src
+
+Try to make a request:
+
+#+begin_src sh
+nats-req -creds $NKEYS_PATH/creds/KO/ADMIN/chat-creds-request.creds chat.req.access example
 #+end_src
 
 * Using the Chat Application
 
 ** Running the provisioner
 
+Run the provisioner with the public JWT of the CHAT account and the signing key 
+to create users under the CHAT account.
+
 #+begin_src 
-go run main.go --acc $NSC_HOME/nats/KO/accounts/KUBECON/KUBECON.jwt \
-    --sk $NKEYS_PATH/keys/A/AO/AAOEOFBQCJKEJ7XZLLSHKVCERH34OPZOIJMOUUVW7QKESQ2KT33JZDRI.nk \
-    --creds $NKEYS_PATH/creds/KO/KUBECON/chat-access.creds  
+go run main.go --acc $NSC_HOME/nats/KO/accounts/CHAT/CHAT.jwt \
+    --sk $NKEYS_PATH/keys/A/DC/ADCQ6MQXSOSLMFIW7J6EDLJO2NCQIH4C44YR3MOWS6QLQYQFDV2UXBHH.nk \
+    --creds $NKEYS_PATH/creds/KO/ADMIN/chat-access.creds
+
+    # TODO: Signing key is from CHAT account
+    # API: Exists on ADMIN
+    # --syscreds $NKEYS_PATH/creds/KO/SYS/sys.creds
 #+end_src
 
 ** Getting some credentials
 
 #+begin_src 
-nats-req -creds nsc/nkeys/creds/KO/KUBECON/chat-creds-request.creds chat.req.access wallyqs
+nats-req -creds nsc/nkeys/creds/KO/ADMIN/chat-creds-request.creds chat.req.access wallyqs 2> my.creds
 #+end_src
 
-* Deploying to K8S: Infra setup
+** Starting the Chat app
+
+#+begin_src sh
+cd ./chat
+go build 
+./chat --creds ../my.creds 
+#+end_src
+
+** Revoking a user 
+
+To revoke:
+
+#+begin_src sh
+nsc revocations add_user -a ADMIN -u UCQYJLDPMVWHETFPF3ZT5DKCVAKGPX33KEZC6DZUHL3DB3VBYNJATOQQ
+nats-req -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep ADMIN   | awk '{print $4}').CLAIMS.UPDATE" $(cat $NSC_HOME/nats/KO/accounts/ADMIN/ADMIN.jwt)
+#+end_src
+
+* COMMENT Deploying to K8S: Infra setup
 
 ** Creating K8S clusters for NATS
 
@@ -155,7 +229,7 @@ for firewall in `doctl compute firewall list | tail -n 3 | awk '{print $1}'`; do
 done
 #+end_src
 
-* Deploying NATS to a K8S Cluster
+* COMMENT Deploying NATS to a K8S Cluster
 
 ** Add Helm NATS repos
 
@@ -301,9 +375,8 @@ Create a mock responder in AMS:
 nats-rply -s 164.90.192.226 -creds nsc/nkeys/creds/KO/KUBECON/chat-access.creds chat.req.access example
 #+end_src
 
-* Using the System account
+* COMMENT Using the System account
 
 #+begin_src sh
 nats-sub -s 188.166.236.158 -creds ./nsc/nkeys/creds/KO/SYS/sys.creds '>'  
 #+end_src
-

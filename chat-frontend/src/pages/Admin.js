@@ -14,7 +14,7 @@ import ListItemText from '@material-ui/core/ListItemText';
 import Button from '@material-ui/core/Button';
 
 const sc = StringCodec();
-const revokeSubject = "chat.revoke.access";
+const revokeSubject = "chat.req.revoke";
 
 function styles(theme) {
   return {

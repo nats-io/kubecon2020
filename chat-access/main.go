@@ -118,7 +118,7 @@ func main() {
 
 	// ADMIN provioning users is able to read online events.
 	_, err = nc.Subscribe("chat.KUBECON.online", func(m *nats.Msg) {
-		log.Println("[Received]", m)
+		log.Println("[Received]", string(m.Data))
 		var name, publicKey string
 
 		if bytes.HasPrefix(m.Data, []byte("{")) {

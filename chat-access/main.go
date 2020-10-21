@@ -14,6 +14,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -27,6 +29,9 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
 )
+
+// userRegistry is a map of usernames to public keys.
+var userRegistry = make(map[string]string)
 
 func usage() {
 	log.Printf("Usage: chat-access [-s server] [-acc acc-jwt-file] [-sk signing-key-file] [-creds creds] [-sid label]\n")
@@ -48,6 +53,7 @@ func main() {
 	var accFile = flag.String("acc", "", "Account JWT File")
 	var skFile = flag.String("sk", "", "Account Signing Key")
 	var appCreds = flag.String("creds", "", "App Credentials File")
+	var appCreds2 = flag.String("creds2", "", "App Credentials File")
 	var sid = flag.String("sid", "<undisclosed>", "Server ID, e.g. AWS/West")
 
 	log.SetFlags(0)
@@ -69,6 +75,12 @@ func main() {
 	if err != nil {
 		log.Fatalln("Failed to connect to NATS:", err)
 	}
+
+	nc2, err := nats.Connect(*server, nats.UserCredentials(*appCreds2))
+	if err != nil {
+		log.Fatalln("Failed to connect to NATS:", err)
+	}
+
 	log.SetFlags(log.LstdFlags)
 	log.Print("Connected to NATS System")
 
@@ -80,11 +92,93 @@ func main() {
 	_, err = nc.QueueSubscribe(reqSubj, reqGroup, func(m *nats.Msg) {
 		if len(m.Data) == 0 {
 			m.Respond([]byte("-ERR 'Name can not be empty'"))
+			return
 		}
 		reqName := simpleName(m.Data)
 		log.Printf("Registered %q [%q]\n", reqName, m.Data)
 		creds := generateUserCreds(acc, sk, reqName, *sid)
 		m.Respond([]byte(creds))
+
+		// Tell admin that we've added a new user.
+		data, err := json.Marshal(userRegistry)
+		if err != nil {
+			m.Respond([]byte("-ERR " + err.Error()))
+			return
+		}
+		nc2.Publish("chat.req.provisioned.updates", data)
+	})
+
+	_, err = nc2.QueueSubscribe("chat.KUBECON.online", reqGroup, func(m *nats.Msg) {
+		var name, publicKey string
+
+		if bytes.HasPrefix(m.Data, []byte("{")) {
+			var mj map[string]interface{}
+			if err := json.Unmarshal(m.Data, &mj); err != nil {
+				m.Respond([]byte("-ERR " + err.Error()))
+				return
+			}
+
+			if v, ok := mj["name"]; ok {
+				if s, ok := v.(string); ok {
+					name = s
+				}
+			}
+			if v, ok := mj["iss"]; ok {
+				if s, ok := v.(string); ok {
+					publicKey = s
+				}
+			}
+		} else if sps := bytes.Split(m.Data, []byte(".")); len(sps) == 3 {
+			tok, err := jwt.DecodeGeneric(string(m.Data))
+			if err != nil {
+				m.Respond([]byte("-ERR " + err.Error()))
+				return
+			}
+
+			name = tok.Name
+			publicKey = tok.Issuer
+		} else {
+			m.Respond([]byte("-ERR 'Unexpected payload'"))
+			return
+		}
+
+		if name == "" || publicKey == "" {
+			m.Respond([]byte("-ERR 'Unexpected empty'"))
+			return
+		}
+
+		userRegistry[name] = publicKey
+
+		// Tell admin that we've added a new user.
+		data, err := json.Marshal(userRegistry)
+		if err != nil {
+			m.Respond([]byte("-ERR " + err.Error()))
+			return
+		}
+		nc2.Publish("chat.req.provisioned.updates", data)
+	})
+
+	_, err = nc2.QueueSubscribe("chat.req.provisioned", reqGroup, func(m *nats.Msg) {
+		data, err := json.Marshal(userRegistry)
+		if err != nil {
+			m.Respond([]byte("-ERR " + err.Error()))
+			return
+		}
+
+		m.Respond([]byte(data))
+	})
+
+	_, err = nc2.QueueSubscribe("chat.revoke.access", reqGroup, func(m *nats.Msg) {
+		username := string(m.Data)
+		delete(userRegistry, username)
+
+		data, err := json.Marshal(userRegistry)
+		if err != nil {
+			m.Respond([]byte("-ERR " + err.Error()))
+			return
+		}
+
+		m.Respond([]byte(data))
 	})
 
 	if err != nil {
@@ -144,6 +238,16 @@ func createNewUserKeys() (string, []byte) {
 }
 
 func generateUserCreds(acc *jwt.AccountClaims, akp nkeys.KeyPair, name, sid string) string {
+	if name == "" {
+		log.Printf("Error generating user JWT: username cannot be empty")
+		return "-ERR 'API_ERROR'"
+	}
+
+	if _, ok := userRegistry[name]; ok {
+		log.Printf("Error generating user JWT: user already exists")
+		return "-ERR 'API_ERROR'"
+	}
+
 	pub, priv := createNewUserKeys()
 	nuc := jwt.NewUserClaims(pub)
 	nuc.Name = name
@@ -157,14 +261,21 @@ func generateUserCreds(acc *jwt.AccountClaims, akp nkeys.KeyPair, name, sid stri
 	nuc.Permissions.Pub.Allow = pubAllow
 	nuc.Permissions.Sub.Allow = subAllow
 
-	nuc.IssuerAccount = acc.Subject
+	// This line was disabled because it causes an authorization error. It may
+	// not be needed because the account public key is already listed under the
+	// iss (issuer) key.
+	// nuc.IssuerAccount = acc.Subject
 
 	ujwt, err := nuc.Encode(akp)
 	if err != nil {
 		log.Printf("Error generating user JWT: %v", err)
 		return "-ERR 'Internal Error'"
 	}
-	return fmt.Sprintf(credsT, ujwt, priv, sid)
+	creds := fmt.Sprintf(credsT, ujwt, priv, sid)
+
+	userRegistry[name] = pub
+
+	return creds
 }
 
 // For demo, first name, max 8 chars and all lower case.

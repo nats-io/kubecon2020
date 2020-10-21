@@ -14,6 +14,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -22,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nats-io/jwt"
+	jwt "github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
 )
@@ -93,9 +94,15 @@ func (s *state) sendOnlineStatus(first bool) {
 	online := jwt.NewGenericClaims(s.me.Subject)
 	online.Name = s.name
 	online.Expires = time.Now().Add(onlineInterval).UTC().Unix() // 1 minute from now
-	online.Type = jwt.ClaimType("chat-online")
+
+	// Type field is deprecated.
+	// online.Type = jwt.ClaimType("chat-online")
+	online.Data["type"] = "chat-online"
+
 	if first {
-		online.Tags.Add("new")
+		// Tags field is deprecated.
+		// online.Tags.Add("new")
+		online.Data["tags"] = []string{"chat-online"}
 	}
 	ojwt, _ := online.Encode(s.skp)
 	s.nc.Publish(onlineSub, []byte(ojwt))
@@ -105,17 +112,24 @@ func (s *state) sendOnlineStatus(first bool) {
 }
 
 func (s *state) processUserUpdate(m *nats.Msg) {
-	userClaim, err := jwt.DecodeGeneric(string(m.Data))
-	if err != nil {
-		s.logErr("-ERR Received a bad user update: %v", err)
+	//userClaim, err := jwt.DecodeGeneric(string(m.Data))
+	//if err != nil {
+	//	s.logErr("-ERR Received a bad user update: %v", err)
+	//	return
+	//}
+	//vr := jwt.CreateValidationResults()
+	//userClaim.Validate(vr)
+	//if vr.IsBlocking(true) {
+	//	s.logErr("-ERR Blocking issues for user update:%+v", vr)
+	//	return
+	//}
+
+	var post *jwt.GenericClaims
+	if err := json.Unmarshal([]byte(m.Data), &post); err != nil {
+		s.logErr("-ERR %s", err)
 		return
 	}
-	vr := jwt.CreateValidationResults()
-	userClaim.Validate(vr)
-	if vr.IsBlocking(true) {
-		s.logErr("-ERR Blocking issues for user update:%+v", vr)
-		return
-	}
+	userClaim := &postClaim{post}
 
 	s.Lock()
 	defer s.Unlock()
@@ -130,10 +144,26 @@ func (s *state) processUserUpdate(m *nats.Msg) {
 	}
 	u.last = time.Now()
 
-	if userClaim.Tags.Contains("new") {
+	// Tags field is deprecated.
+	// if userClaim.Tags.Contains("new") {
+	if tagsContains(userClaim.Data["tags"], "new") {
 		// Now send out status as well so they know us before next update.
 		s.sendOnlineStatus(false)
 	}
+}
+
+func tagsContains(v interface{}, tag string) bool {
+	tags, ok := v.([]string)
+	if !ok {
+		return false
+	}
+
+	for _, t := range tags {
+		if t == tag {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *state) postSubject() string {
@@ -153,22 +183,30 @@ func (s *state) sendPost(m string) *postClaim {
 	newPost := s.newPost(m)
 	pjwt, _ := newPost.Encode(s.skp)
 	s.registerPost(newPost.ID)
+
 	s.nc.Publish(s.postSubject(), []byte(pjwt))
 	return newPost
 }
 
 func (s *state) checkPostClaim(claim string) *postClaim {
-	post, err := jwt.DecodeGeneric(claim)
-	if err != nil {
-		s.logErr("-ERR Received a bad post: %v", err)
+	//post, err := jwt.DecodeGeneric(claim)
+	//if err != nil {
+	//	s.logErr("-ERR Received a bad post: %v", err)
+	//	return nil
+	//}
+	//vr := jwt.CreateValidationResults()
+	//post.Validate(vr)
+	//if vr.IsBlocking(true) {
+	//	s.logErr("-ERR Blocking issues for post:%+v", vr)
+	//	return nil
+	//}
+
+	var post *jwt.GenericClaims
+	if err := json.Unmarshal([]byte(claim), &post); err != nil {
+		s.logErr("-ERR %s", err)
 		return nil
 	}
-	vr := jwt.CreateValidationResults()
-	post.Validate(vr)
-	if vr.IsBlocking(true) {
-		s.logErr("-ERR Blocking issues for post:%+v", vr)
-		return nil
-	}
+
 	return &postClaim{post}
 }
 

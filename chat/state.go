@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/marcusolsson/tui-go"
-	"github.com/nats-io/jwt"
+	jwt "github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
 )
@@ -96,9 +96,13 @@ func (s *state) newPost(msg string) *postClaim {
 	newPost.Name = s.name
 	newPost.Data["msg"] = msg
 	if s.cur.kind == direct {
-		newPost.Type = jwt.ClaimType("chat-dm")
+		// Type field is deprecated.
+		// newPost.Type = jwt.ClaimType("chat-dm")
+		newPost.Data["type"] = "chat-dm"
 	} else {
-		newPost.Type = jwt.ClaimType("chat-post")
+		// Type field is deprecated.
+		//newPost.Type = jwt.ClaimType("chat-post")
+		newPost.Data["type"] = "chat-post"
 	}
 	return newPost
 }

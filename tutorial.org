@@ -91,7 +91,8 @@ $ nsc add user -a ADMIN chat-access \
    -K $NKEYS_PATH/keys/A/AE/AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN.nk \
    --allow-sub 'chat.req.access' \
    --allow-sub 'chat.KUBECON.online' \
-   --allow-sub 'chat.req.provisioned' \
+   --allow-pubsub 'chat.req.provisioned' \
+   --allow-pubsub 'chat.req.provisioned.updates' \
    --allow-pubsub 'chat.req.revoke' \
    --allow-pubsub '_INBOX.>' \
    --allow-pubsub '_R_.>' \

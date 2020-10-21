@@ -1,4 +1,5 @@
 import React from 'react';
+import { Redirect } from 'react-router-dom';
 
 import { connect, StringCodec, credsAuthenticator } from 'nats.ws';
 import { v4 } from 'uuid';
@@ -205,6 +206,7 @@ class Chat extends React.Component {
     this.state = {
       messageCompose: '',
       nc: null,
+      redirect: '',
       curContext: chanKubecon,
       messages: {
         [chanGeneral]: [],
@@ -246,7 +248,7 @@ class Chat extends React.Component {
 
   componentDidMount() {
     connect({
-      servers: ["wss://variadico.xyz:9222"],
+      servers: ["wss://localhost:9222"],
       authenticator: credsAuthenticator(sc.encode(this.user.creds)),
     }).then((nc) => {
       this.setState({nc});
@@ -267,6 +269,12 @@ class Chat extends React.Component {
         callback: this.handleSelfMessages,
       });
 
+      nc.closed().then((err) => {
+        // Handle server closing the connection.
+        localStorage.removeItem('natschat.user.name');
+        localStorage.removeItem('natschat.user.creds');
+        this.setState({redirect: "/"});
+      });
 
       nc.publish(onlineStatus, sc.encode(JSON.stringify(this.getOnlineJwt())));
       window.setInterval(() => {
@@ -506,6 +514,10 @@ class Chat extends React.Component {
   }
 
   render() {
+    if (this.state.redirect !== '') {
+      return <Redirect to={this.state.redirect} />;
+    }
+
     const classes = this.props.classes;
     const messages = this.state.messages[this.state.curContext];
 

@@ -219,13 +219,13 @@ func main() {
 	// _, err = nc2.QueueSubscribe("chat.revoke.access", reqGroup, func(m *nats.Msg) {
 	// 	username := string(m.Data)
 	// 	delete(userRegistry, username)
-	// 
+	//
 	// 	data, err := json.Marshal(userRegistry)
 	// 	if err != nil {
 	// 		m.Respond([]byte("-ERR " + err.Error()))
 	// 		return
 	// 	}
-	// 
+	//
 	// 	m.Respond([]byte(data))
 	// })
 	// if err != nil {
@@ -270,7 +270,15 @@ func main() {
 			log.Println("Error: ", err)
 			return
 		}
-		m.Respond([]byte("+OK"))
+
+		delete(userRegistry, reqName)
+		data, err := json.Marshal(userRegistry)
+		if err != nil {
+			m.Respond([]byte("-ERR " + err.Error()))
+			return
+		}
+
+		m.Respond([]byte(data))
 	})
 	if err != nil {
 		log.Fatal(err)

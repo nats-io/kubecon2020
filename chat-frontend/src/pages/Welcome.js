@@ -12,7 +12,7 @@ import Paper from '@material-ui/core/Paper';
 import TextField from '@material-ui/core/TextField';
 import Typography from '@material-ui/core/Typography';
 
-const bootstrapCreds = '-----BEGIN NATS USER JWT-----\neyJ0eXAiOiJKV1QiLCJhbGciOiJlZDI1NTE5LW5rZXkifQ.eyJqdGkiOiJLR1NJRVRJTVVJVE4zQ0JJWVdTNklKVzU2TE0yRkpKS1pZVE5ONk5MV0hFRFVIV1VFWDJBIiwiaWF0IjoxNjAyODk3MDUwLCJpc3MiOiJBQ0NYN0haNzNBNlNFUTdRWEszWlYzSTI1TVVFN1o3SEJMUFZJRFZEV1UzV0pDVDNEWVJXR1dRVyIsIm5hbWUiOiJzYW5kYm94ZWQtdXNlciIsInN1YiI6IlVEM1BXTTdFVEQ2UkxDVTNQT0pIQTUzT0lDNTZZUjNNRTRBVFFNTVdJSjU3NlNQQU9IRUhKM1lSIiwibmF0cyI6eyJwdWIiOnsiYWxsb3ciOlsiY2hhdC5yZXEuYWNjZXNzIiwiX0lOQk9YLlx1MDAzZSIsIl9SXyIsIl9SXy5cdTAwM2UiXX0sInN1YiI6eyJhbGxvdyI6WyJfSU5CT1guXHUwMDNlIiwiX1JfIiwiX1JfLlx1MDAzZSJdfSwic3VicyI6LTEsImRhdGEiOi0xLCJwYXlsb2FkIjotMSwidHlwZSI6InVzZXIiLCJ2ZXJzaW9uIjoyfX0.3FhbKg0ZlEnR0H7cZgOgEXVC81_8k1NtxrJtEwufQJVwMgruVbuRzvQim7pXXnpjUyaIX1o97wCz1EngUaFcBQ\n------END NATS USER JWT------\n\n************************* IMPORTANT *************************\nNKEY Seed printed below can be used to sign and prove identity.\nNKEYs are sensitive and should be treated as secrets.\n\n-----BEGIN USER NKEY SEED-----\nSUALUF555VICJH4BIZAU4O7QDCBBTNPXB5WHSBIEVFZVNOXWYVIIHRF324\n------END USER NKEY SEED------\n\n*************************************************************\n';
+const bootstrapCreds = '-----BEGIN NATS USER JWT-----\neyJ0eXAiOiJqd3QiLCJhbGciOiJlZDI1NTE5In0.eyJqdGkiOiJET0pSNVFBM1RSTUQ3TExIM1VGM1NRTU5TQkFZVEhSNUFIT0ZCSVFHNFVUWFpMQ0xWV0pRIiwiaWF0IjoxNjAzMzA2Mjc2LCJpc3MiOiJBQzVISlJUQlpOWkdUQTNJM1AyV1BSVVlTTUVERFFWUFlYVFdLWkdOWk9VVlNBN1pRTVhTS1FMUyIsIm5hbWUiOiJjaGF0LWNyZWRzLXJlcXVlc3QiLCJzdWIiOiJVRDUyNzNMRldBU0wyQlA1VzJPUUo3TjdEQ1ZHSVRLRk9NSDVMQjRJQ0pLUEpBWkJCWVlVWERVWSIsInR5cGUiOiJ1c2VyIiwibmF0cyI6eyJwdWIiOnsiYWxsb3ciOlsiX0lOQk9YLlx1MDAzZSIsIl9SXy5cdTAwM2UiLCJjaGF0LnJlcS5hY2Nlc3MiXX0sInN1YiI6eyJhbGxvdyI6WyJfSU5CT1guXHUwMDNlIiwiX1JfLlx1MDAzZSJdfX0sImlzc3Vlcl9hY2NvdW50IjoiQUM3TElVR1YzTzJHT0lHR0FZN0ROTUNaSkhST0RCUzVaRjVDRDQ1Nkk0QklPSzRMQUxBNkFFVlEifQ.PFKdYyQm3lxyN2jRa97XexuspxTIzgf2MtRf24ivIYrUHNYWYjJ76jPujMZ4hlTWm25ibXif5gRpVSoGNs2VBA\n------END NATS USER JWT------\n\n************************* IMPORTANT *************************\nNKEY Seed printed below can be used to sign and prove identity.\nNKEYs are sensitive and should be treated as secrets.\n\n-----BEGIN USER NKEY SEED-----\nSUAGWG6WIE7WVABGBBMIMAWH6KPDRGO25F73D57Z73KZXBHM3JD42MGVPE\n------END USER NKEY SEED------\n\n*************************************************************\n';
 const credsRequestSubject = 'chat.req.access';
 
 function styles(theme) {
@@ -48,7 +48,7 @@ class Welcome extends React.Component {
     e.preventDefault();
 
     connect({
-      servers: ['wss://variadico.xyz:9222'],
+      servers: ['wss://localhost:9222'],
       authenticator: credsAuthenticator(this.sc.encode(bootstrapCreds)),
       name: 'KUBECON NATS Chat WebUI',
     }).then((nc) => {
@@ -65,7 +65,7 @@ class Welcome extends React.Component {
       return Promise.all([
         Promise.resolve(creds),
         connect({
-          servers: ['wss://variadico.xyz:9222'],
+          servers: ['wss://localhost:9222'],
           authenticator: credsAuthenticator(this.sc.encode(creds)),
           name: 'KUBECON NATS Chat WebUI',
         }),

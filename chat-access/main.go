@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	jwt "github.com/nats-io/jwt/v2"
+	"github.com/nats-io/jwt"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
 )
@@ -34,7 +34,7 @@ import (
 var userRegistry = make(map[string]string)
 
 func usage() {
-	log.Printf("Usage: chat-access [-s server] [-acc acc-jwt-file] [-sk signing-key-file] [-creds creds] [-sid label]\n")
+	log.Printf("Usage: chat-access [-s server] [-acc acc-jwt-file] [-sk signing-key-file] [-osk operator-signing-key-file] [-creds creds] [-syscreds creds] [-sid label]\n")
 }
 
 func showUsageAndExit(exitcode int) {
@@ -44,6 +44,7 @@ func showUsageAndExit(exitcode int) {
 
 const (
 	reqSubj    = "chat.req.access"
+	revSubj    = "chat.req.revoke"
 	reqGroup   = "kubecon"
 	maxNameLen = 8
 )
@@ -52,8 +53,9 @@ func main() {
 	var server = flag.String("s", "localhost", "NATS System")
 	var accFile = flag.String("acc", "", "Account JWT File")
 	var skFile = flag.String("sk", "", "Account Signing Key")
+	var oskFile = flag.String("osk", "", "Operator Signing Key")
 	var appCreds = flag.String("creds", "", "App Credentials File")
-	var appCreds2 = flag.String("creds2", "", "App Credentials File")
+	var sysCreds = flag.String("syscreds", "", "Sys Credentials File")
 	var sid = flag.String("sid", "<undisclosed>", "Server ID, e.g. AWS/West")
 
 	log.SetFlags(0)
@@ -64,19 +66,15 @@ func main() {
 		showUsageAndExit(1)
 	}
 
+	// Connect to the NATS under the ADMIN account to provision and revoke users.
 	opts := []nats.Option{nats.Name("KubeCon Chat-Access")}
 	opts = setupConnOptions(opts)
 	if *appCreds != "" {
 		opts = append(opts, nats.UserCredentials(*appCreds))
 	}
 
-	// Connect to NATS
+	// Connect to NATS to expose API to provision/revoke users.
 	nc, err := nats.Connect(*server, opts...)
-	if err != nil {
-		log.Fatalln("Failed to connect to NATS:", err)
-	}
-
-	nc2, err := nats.Connect(*server, nats.UserCredentials(*appCreds2))
 	if err != nil {
 		log.Fatalln("Failed to connect to NATS:", err)
 	}
@@ -84,11 +82,21 @@ func main() {
 	log.SetFlags(log.LstdFlags)
 	log.Print("Connected to NATS System")
 
-	// Load account JWT and signing key
-	acc, sk := loadAccountAndSigningKey(*accFile, *skFile)
+	// Connect to NATS using system credentials to make JWT updates.
+	opts2 := []nats.Option{nats.Name("KubeCon Chat-RevokeAccess")}
+	opts2 = setupConnOptions(opts2)
+	if *sysCreds != "" {
+		opts2 = append(opts2, nats.UserCredentials(*sysCreds))
+	}
+	sc, err := nats.Connect(*server, opts2...)
+	if err != nil {
+		log.Fatalln("Failed to connect to NATS System Account:", err)
+	}
 
-	// Subscribe to Requests. QueueSubscriber means we can scale
-	// up and down as needed.
+	// Load account JWT and signing keys.
+	acc, sk, osk := loadAccountAndSigningKeys(*accFile, *skFile, *oskFile)
+
+	// Subscribe to user provisioning requests.
 	_, err = nc.QueueSubscribe(reqSubj, reqGroup, func(m *nats.Msg) {
 		if len(m.Data) == 0 {
 			m.Respond([]byte("-ERR 'Name can not be empty'"))
@@ -105,10 +113,12 @@ func main() {
 			m.Respond([]byte("-ERR " + err.Error()))
 			return
 		}
-		nc2.Publish("chat.req.provisioned.updates", data)
+		sc.Publish("chat.req.provisioned.updates", data)
 	})
 
-	_, err = nc2.QueueSubscribe("chat.KUBECON.online", reqGroup, func(m *nats.Msg) {
+	// ADMIN provioning users is able to read online events.
+	_, err = nc.Subscribe("chat.KUBECON.online", func(m *nats.Msg) {
+		log.Println("[Received]", m)
 		var name, publicKey string
 
 		if bytes.HasPrefix(m.Data, []byte("{")) {
@@ -155,10 +165,10 @@ func main() {
 			m.Respond([]byte("-ERR " + err.Error()))
 			return
 		}
-		nc2.Publish("chat.req.provisioned.updates", data)
+		nc.Publish("chat.req.provisioned.updates", data)
 	})
 
-	_, err = nc2.QueueSubscribe("chat.req.provisioned", reqGroup, func(m *nats.Msg) {
+	_, err = nc.QueueSubscribe("chat.req.provisioned", reqGroup, func(m *nats.Msg) {
 		data, err := json.Marshal(userRegistry)
 		if err != nil {
 			m.Respond([]byte("-ERR " + err.Error()))
@@ -168,19 +178,60 @@ func main() {
 		m.Respond([]byte(data))
 	})
 
-	_, err = nc2.QueueSubscribe("chat.revoke.access", reqGroup, func(m *nats.Msg) {
-		username := string(m.Data)
-		delete(userRegistry, username)
+	// _, err = nc2.QueueSubscribe("chat.revoke.access", reqGroup, func(m *nats.Msg) {
+	// 	username := string(m.Data)
+	// 	delete(userRegistry, username)
+	// 
+	// 	data, err := json.Marshal(userRegistry)
+	// 	if err != nil {
+	// 		m.Respond([]byte("-ERR " + err.Error()))
+	// 		return
+	// 	}
+	// 
+	// 	m.Respond([]byte(data))
+	// })
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
-		data, err := json.Marshal(userRegistry)
+	// Subscribe to revoke users.
+	_, err = nc.QueueSubscribe(revSubj, reqGroup, func(m *nats.Msg) {
+		if len(m.Data) == 0 {
+			m.Respond([]byte("-ERR 'Name can not be empty'"))
+		}
+		reqName := simpleName(m.Data)
+		pubkey := userRegistry[reqName]
+
+		lookupSubject := fmt.Sprintf("$SYS.REQ.ACCOUNT.%s.CLAIMS.LOOKUP", acc.Subject)
+		resp, err := sc.Request(lookupSubject, []byte(""), 3 * time.Second)
 		if err != nil {
-			m.Respond([]byte("-ERR " + err.Error()))
+			log.Println("Error: ", err)
 			return
 		}
+		log.Println("[Response]", string(resp.Data))
 
-		m.Respond([]byte(data))
+		latestAcc, err := jwt.DecodeAccountClaims(string(resp.Data))
+		if err != nil {
+			log.Println("Error: ", err)
+			return
+		}
+		latestAcc.Revoke(pubkey)
+
+		encoded, err := latestAcc.Encode(osk)
+		if err != nil {
+			log.Println("Error: ", err)
+			return
+		}
+		log.Println("RESULT:", latestAcc, encoded)
+
+		revokeSubject := fmt.Sprintf("$SYS.REQ.ACCOUNT.%s.CLAIMS.UPDATE", acc.Subject)
+		_, err = sc.Request(revokeSubject, []byte(encoded), 3 * time.Second)
+		if err != nil {
+			log.Println("Error: ", err)
+			return
+		}
+		m.Respond([]byte("+OK"))
 	})
-
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -264,7 +315,7 @@ func generateUserCreds(acc *jwt.AccountClaims, akp nkeys.KeyPair, name, sid stri
 	// This line was disabled because it causes an authorization error. It may
 	// not be needed because the account public key is already listed under the
 	// iss (issuer) key.
-	// nuc.IssuerAccount = acc.Subject
+	nuc.IssuerAccount = acc.Subject
 
 	ujwt, err := nuc.Encode(akp)
 	if err != nil {
@@ -288,7 +339,7 @@ func simpleName(name []byte) string {
 	return reqName
 }
 
-func loadAccountAndSigningKey(accFile, skFile string) (*jwt.AccountClaims, nkeys.KeyPair) {
+func loadAccountAndSigningKeys(accFile, skFile, oskFile string) (*jwt.AccountClaims, nkeys.KeyPair, nkeys.KeyPair) {
 	contents, err := ioutil.ReadFile(accFile)
 	if err != nil {
 		log.Fatalf("Could not load account file: %v", err)
@@ -305,7 +356,17 @@ func loadAccountAndSigningKey(accFile, skFile string) (*jwt.AccountClaims, nkeys
 	if err != nil {
 		log.Fatalf("Could not decode signing key: %v", err)
 	}
-	return acc, kp
+
+	oseed, err := ioutil.ReadFile(oskFile)
+	if err != nil {
+		log.Fatalf("Could not load signing key file: %v", err)
+	}
+	okp, err := nkeys.FromSeed(oseed)
+	if err != nil {
+		log.Fatalf("Could not decode signing key: %v", err)
+	}
+
+	return acc, kp, okp
 }
 
 func setupConnOptions(opts []nats.Option) []nats.Option {

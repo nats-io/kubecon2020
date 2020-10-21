@@ -14,7 +14,9 @@ import ListItemText from '@material-ui/core/ListItemText';
 import Button from '@material-ui/core/Button';
 
 const sc = StringCodec();
-const revokeSubject = "chat.req.revoke";
+const revokeSubject = 'chat.req.revoke';
+const provisionUpdateSubject = 'chat.req.provisioned.updates';
+const provisionedUsersSubject = 'chat.req.provisioned';
 
 function styles(theme) {
   return {
@@ -68,16 +70,16 @@ class Admin extends React.Component {
       const creds = e.target.result;
 
       connect({
-        servers: ["wss://variadico.xyz:9222"],
+        servers: ["wss://localhost:9222"],
         authenticator: credsAuthenticator(sc.encode(creds)),
       }).then((nc) => {
-        nc.subscribe('chat.req.provisioned.updates', {
+        nc.subscribe(provisionUpdateSubject, {
           callback: this.handleProvisioned,
         });
 
         return Promise.all([
           Promise.resolve(nc),
-          nc.request('chat.req.provisioned', sc.encode('plz')),
+          nc.request(provisionedUsersSubject, sc.encode('plz')),
         ]);
       }).then(([nc, msg]) => {
         this.setState({

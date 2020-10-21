@@ -248,8 +248,9 @@ class Chat extends React.Component {
 
   componentDidMount() {
     connect({
-      servers: ["wss://localhost:9222"],
+      servers: [this.props.natsInfo.url],
       authenticator: credsAuthenticator(sc.encode(this.user.creds)),
+      name: 'KUBECON NATS Chat WebUI',
     }).then((nc) => {
       this.setState({nc});
 

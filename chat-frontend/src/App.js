@@ -9,6 +9,12 @@ import Welcome from './pages/Welcome';
 import Chat from './pages/Chat';
 import Admin from './pages/Admin';
 
+// These values get populated in the build artifact at compile time.
+const natsInfo = {
+  url: '%%NATS_URL%%',
+  bootstrapCreds: '%%NATS_BOOTSTRAP_CREDS%%',
+};
+
 const theme = createMuiTheme({
   palette: {
     background: {
@@ -54,7 +60,7 @@ function AppRoute(props) {
     <Route
       path={props.path}
       render={routeProps => {
-        return <Component match={routeProps.match} />;
+        return <Component match={routeProps.match} natsInfo={natsInfo} />;
       }}
     />
   );

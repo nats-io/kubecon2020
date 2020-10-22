@@ -1,0 +1,42 @@
+nats:
+  image: synadia/nats-server:nightly
+
+  # Bind a host port from the host for each one of the pods.
+  externalAccess: true
+
+  logging:
+    debug: false
+    trace: false
+
+  tls:
+    secret:
+      name: nats-tls
+    cert: "fullchain.pem"
+    key: "privkey.pem"
+
+cluster:
+  enabled: true
+
+auth:
+  enabled: true
+
+  resolver:
+    # Use the NATS Account embedded server.
+    type: full
+
+    configMap:
+      name: nats-accounts
+      key: resolver.conf
+
+natsbox:
+  enabled: false
+
+websocket:
+  enabled: true
+  port: 443
+
+  tls:
+    secret:
+      name: nats-tls
+    cert: "fullchain.pem"
+    key: "privkey.pem"

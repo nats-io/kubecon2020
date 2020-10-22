@@ -281,6 +281,7 @@ class Chat extends React.Component {
   }
 
   componentDidMount() {
+    // Connect with real user creds from before.
     connect({
       servers: [this.props.natsInfo.url],
       authenticator: credsAuthenticator(sc.encode(this.user.creds)),
@@ -288,33 +289,43 @@ class Chat extends React.Component {
     }).then((nc) => {
       this.setState({nc});
 
+      // Setup NATS Streams.
+      // Listen for messages on KUBECON channel.
       nc.subscribe(`${postsPrefix}.${chanKubecon}`, {
         callback: this.handleChanKubecon,
       });
+      // Listen for messages on NATS channel.
       nc.subscribe(`${postsPrefix}.${chanNats}`, {
         callback: this.handleChanNats,
       });
+      // Listen for messages on General channel.
       nc.subscribe(`${postsPrefix}.${chanGeneral}`, {
         callback: this.handleChanGeneral,
       });
+      // Listen for user heartbeats.
       nc.subscribe(onlineStatus, {
         callback: this.handleOnline,
       });
+      // Listen for direct messages to me.
       nc.subscribe(`${dmsPrefix}.${this.user.publicKey}`, {
         callback: this.handleSelfMessages,
       });
 
-      nc.closed().then((err) => {
-        // Handle server closing the connection.
-        localStorage.removeItem('natschat.user.name');
-        localStorage.removeItem('natschat.user.creds');
-        this.setState({redirect: true});
-      });
 
+      // Broadcast my heartbeats to everyone else.
       nc.publish(onlineStatus, sc.encode(JSON.stringify(this.getOnlineJwt())));
       window.setInterval(() => {
         nc.publish(onlineStatus, sc.encode(JSON.stringify(this.getOnlineJwt())));
       }, 30000);
+
+
+      // nc.closed gets triggered when our user JWT gets revoked.
+      nc.closed().then((err) => {
+        localStorage.removeItem('natschat.user.name');
+        localStorage.removeItem('natschat.user.creds');
+        // Redirect back to Welcome page.
+        this.setState({redirect: true});
+      });
     }).catch(err => {
       console.error('failed to connect to NATS:', err);
     });

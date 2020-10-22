@@ -1,7 +1,11 @@
 import React from 'react';
 import { Redirect } from 'react-router-dom';
 
-import { connect, StringCodec, credsAuthenticator } from 'nats.ws';
+import {
+  connect,            // Used to connect to NATS Server
+  StringCodec,        // Used to translate between String and Uint8Array and back.
+  credsAuthenticator, // Used to authenticate with NATS JWT credentials.
+} from 'nats.ws';
 
 import { withStyles } from "@material-ui/core/styles";
 import Box from '@material-ui/core/Box';
@@ -13,7 +17,7 @@ import TextField from '@material-ui/core/TextField';
 import Typography from '@material-ui/core/Typography';
 
 const credsRequestSubject = 'chat.req.access';
-  const sc = StringCodec();
+const sc = StringCodec();
 
 function styles(theme) {
   return {
@@ -45,6 +49,8 @@ class Welcome extends React.Component {
   register(e) {
     e.preventDefault();
 
+    // First, we connect to the NATS Server with creds that can only requests
+    // real creds.
     connect({
       servers: [this.props.natsInfo.url],
       authenticator: credsAuthenticator(sc.encode(this.props.natsInfo.bootstrapCreds)),
@@ -52,16 +58,20 @@ class Welcome extends React.Component {
     }).then((nc) => {
       return Promise.all([
         Promise.resolve(nc),
+        // nc.request hits a NATS Server.
         nc.request(credsRequestSubject, sc.encode(this.state.username)),
       ]);
     }).then(([nc, m]) => {
       return Promise.all([
         Promise.resolve(sc.decode(m.data)),
+        // nc.close closes the original less restricted NATS Server user
+        // account.
         nc.close(),
       ]);
     }).then(([creds]) => {
       return Promise.all([
         Promise.resolve(creds),
+        // reconnect with full real creds.
         connect({
           servers: [this.props.natsInfo.url],
           authenticator: credsAuthenticator(sc.encode(creds)),
@@ -69,6 +79,8 @@ class Welcome extends React.Component {
         }),
       ]);
     }).then(([creds, nc]) => {
+      // If we were able to reconnect with real creds, we've authenticated
+      // correctly!
       localStorage.setItem('natschat.user.name', this.state.username);
       localStorage.setItem('natschat.user.creds', creds);
       this.setState({redirect: true});

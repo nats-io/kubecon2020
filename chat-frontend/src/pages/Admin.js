@@ -69,21 +69,29 @@ class Admin extends React.Component {
     r.addEventListener('load', (e) => {
       const creds = e.target.result;
 
+      // Connect with admin credentials that were dropped in.
       connect({
         servers: [this.props.natsInfo.url],
         authenticator: credsAuthenticator(sc.encode(creds)),
       }).then((nc) => {
+        // If we made it here, the admin creds were successfully validated by
+        // the NATS Server.
+
+        // Setup NATS Stream to listen for active user updates.
         nc.subscribe(provisionUpdateSubject, {
           callback: this.handleProvisioned,
         });
 
         return Promise.all([
           Promise.resolve(nc),
-          nc.request(provisionedUsersSubject, sc.encode('plz')),
+          // Ask NATS Service to send us the list of users it currently knows
+          // about.
+          nc.request(provisionedUsersSubject, sc.encode('')),
         ]);
       }).then(([nc, msg]) => {
         this.setState({
           nc,
+          // Save users to state.
           provisioned: JSON.parse(sc.decode(msg.data)),
           authed: true,
         });

@@ -82,7 +82,6 @@ func main() {
 	log.SetFlags(log.LstdFlags)
 	log.Print("Connected to NATS System")
 
-<<<<<<< Updated upstream
 	// Connect to NATS using system credentials to make JWT updates.
 	opts2 := []nats.Option{nats.Name("KubeCon Chat-RevokeAccess")}
 	opts2 = setupConnOptions(opts2)
@@ -97,23 +96,6 @@ func main() {
 	// Load account JWT and signing keys.
 	acc, sk, osk := loadAccountAndSigningKeys(*accFile, *skFile, *oskFile)
 
-=======
-
-	// Connect to NATS using system credentials to make JWT updates.
-	opts2 := []nats.Option{nats.Name("KubeCon Chat-RevokeAccess")}
-	opts2 = setupConnOptions(opts2)
-	if *sysCreds != "" {
-		opts2 = append(opts2, nats.UserCredentials(*sysCreds))
-	}
-	sc, err := nats.Connect(*server, opts2...)
-	if err != nil {
-		log.Fatalln("Failed to connect to NATS System Account:", err)
-	}
-
-	// Load account JWT and signing keys.
-	acc, sk, osk := loadAccountAndSigningKeys(*accFile, *skFile, *oskFile)
-
->>>>>>> Stashed changes
 	// Subscribe to user provisioning requests.
 	_, err = nc.QueueSubscribe(reqSubj, reqGroup, func(m *nats.Msg) {
 		if len(m.Data) == 0 {
@@ -189,23 +171,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Subscribe to revoke users.
-	_, err = nc.QueueSubscribe(revSubj, reqGroup, func(m *nats.Msg) {
-		if len(m.Data) == 0 {
-			m.Respond([]byte("-ERR 'Name can not be empty'"))
-		}
-		reqName := simpleName(m.Data)
-		pubkey := userRegistry[reqName]
-
-		lookupSubject := fmt.Sprintf("$SYS.REQ.ACCOUNT.%s.CLAIMS.LOOKUP", acc.Subject)
-		resp, err := sc.Request(lookupSubject, []byte(""), 3 * time.Second)
-		if err != nil {
-			log.Println("Error: ", err)
-			return
-		}
-		log.Println("[Response]", string(resp.Data))
-
-<<<<<<< Updated upstream
 	_, err = nc.QueueSubscribe("chat.req.provisioned", reqGroup, func(m *nats.Msg) {
 		data, err := json.Marshal(userRegistry)
 		if err != nil {
@@ -216,22 +181,6 @@ func main() {
 		m.Respond([]byte(data))
 	})
 
-	// _, err = nc2.QueueSubscribe("chat.revoke.access", reqGroup, func(m *nats.Msg) {
-	// 	username := string(m.Data)
-	// 	delete(userRegistry, username)
-	//
-	// 	data, err := json.Marshal(userRegistry)
-	// 	if err != nil {
-	// 		m.Respond([]byte("-ERR " + err.Error()))
-	// 		return
-	// 	}
-	//
-	// 	m.Respond([]byte(data))
-	// })
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
 	// Subscribe to revoke users.
 	_, err = nc.QueueSubscribe(revSubj, reqGroup, func(m *nats.Msg) {
 		if len(m.Data) == 0 {
@@ -248,8 +197,6 @@ func main() {
 		}
 		log.Println("[Response]", string(resp.Data))
 
-=======
->>>>>>> Stashed changes
 		latestAcc, err := jwt.DecodeAccountClaims(string(resp.Data))
 		if err != nil {
 			log.Println("Error: ", err)

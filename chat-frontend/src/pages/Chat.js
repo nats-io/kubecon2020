@@ -108,7 +108,8 @@ function MessageDisplay(props) {
     <Box
       px={1}
       py={3}
-      height="90%"
+      height="90vh"
+      overflow="auto"
       display="flex"
       flexDirection="column-reverse"
     >

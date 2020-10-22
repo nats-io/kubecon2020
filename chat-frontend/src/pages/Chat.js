@@ -38,6 +38,11 @@ function styles(theme) {
     messageInputField: {
       color: '#1A202C',
     },
+    contextItem: {
+      '&.Mui-selected': {
+        backgroundColor: 'rgba(0, 0, 0, 0.20)',
+      },
+    },
   };
 }
 
@@ -156,6 +161,7 @@ function MessageInput(props) {
 function ContextSidebar(props) {
   const current = props.current;
   const onClick = props.onClick;
+  const classes = props.classes;
 
   let online = null;
   if (props.online) {
@@ -168,6 +174,7 @@ function ContextSidebar(props) {
           button
           selected={current === o.username}
           onClick={onClick(o.username)}
+          classes={{root: classes.contextItem}}
         >
           <ListItemText primary={`• ${o.username}`} />
         </ListItem>
@@ -186,13 +193,28 @@ function ContextSidebar(props) {
       <Box>
         <Typography variant="caption">Channels</Typography>
         <List>
-          <ListItem button selected={current === chanKubecon} onClick={onClick(chanKubecon)}>
+          <ListItem
+            classes={{root: classes.contextItem}}
+            button
+            selected={current === chanKubecon}
+            onClick={onClick(chanKubecon)}
+          >
             <ListItemText primary={`# ${chanKubecon}`} />
           </ListItem>
-          <ListItem button selected={current === chanNats} onClick={onClick(chanNats)}>
+          <ListItem
+            classes={{root: classes.contextItem}}
+            button
+            selected={current === chanNats}
+            onClick={onClick(chanNats)}
+          >
             <ListItemText primary={`# ${chanNats}`} />
           </ListItem>
-          <ListItem button selected={current === chanGeneral} onClick={onClick(chanGeneral)}>
+          <ListItem
+            classes={{root: classes.contextItem}}
+            button
+            selected={current === chanGeneral}
+            onClick={onClick(chanGeneral)}
+          >
             <ListItemText primary={`# ${chanGeneral}`} />
           </ListItem>
         </List>
@@ -539,6 +561,7 @@ class Chat extends React.Component {
             <Divider />
             <Box mt={3} />
             <ContextSidebar
+              classes={classes}
               online={this.state.online}
               onClick={this.changeContext}
               current={this.state.curContext}

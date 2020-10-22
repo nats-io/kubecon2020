@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats-chat-frontend
+  namespace: default
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: nats-chat-frontend
+        image: synadia/nats-chat-frontend:1.0.0
+        env:
+        - name: MODE
+          value: production
+        - name: SERVER_URL
+          value: wss://sfo.nats.chat:443
+        # TODO(jaime): Fix creds must be 1 line with newlines escaped.
+        - name: BOOTSTRAP_CREDS
+          valueFrom:
+            secretKeyRef:
+              name: foo
+              key: bar
+        imagePullPolicy: IfNotPresent
+        command:
+        - make
+        - start

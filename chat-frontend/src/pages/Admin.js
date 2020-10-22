@@ -70,7 +70,7 @@ class Admin extends React.Component {
       const creds = e.target.result;
 
       connect({
-        servers: ["wss://localhost:9222"],
+        servers: [this.props.natsInfo.url],
         authenticator: credsAuthenticator(sc.encode(creds)),
       }).then((nc) => {
         nc.subscribe(provisionUpdateSubject, {

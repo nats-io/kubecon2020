@@ -162,6 +162,7 @@ function ContextSidebar(props) {
   const current = props.current;
   const onClick = props.onClick;
   const classes = props.classes;
+  const onLogout = props.onLogout;
 
   let online = null;
   if (props.online) {
@@ -224,6 +225,9 @@ function ContextSidebar(props) {
         <Typography variant="caption">Direct Messages</Typography>
         {online}
       </Box>
+      <Box position="absolute" top="92vh">
+        <Button size="small" onClick={onLogout}>Logout</Button>
+      </Box>
     </Box>
   );
 }
@@ -273,6 +277,7 @@ class Chat extends React.Component {
     this.handleOnline = this.handleOnline.bind(this);
     this.handleSelfMessages = this.handleSelfMessages.bind(this);
     this.getOnlineJwt = this.getOnlineJwt.bind(this);
+    this.logout = this.logout.bind(this);
   }
 
   componentDidMount() {
@@ -334,6 +339,12 @@ class Chat extends React.Component {
         version: 2,
       },
     };
+  }
+
+  logout() {
+      localStorage.removeItem('natschat.user.name');
+      localStorage.removeItem('natschat.user.creds');
+      this.setState({redirect: true});
   }
 
   updateMessages(context, msg) {
@@ -565,6 +576,7 @@ class Chat extends React.Component {
               online={this.state.online}
               onClick={this.changeContext}
               current={this.state.curContext}
+              onLogout={this.logout}
             />
           </Box>
         </Grid>

@@ -63,7 +63,7 @@ account key stored /Users/wallyqs/repos/nats-dev/src/github.com/nats-io/kubecon2
 #
 # This signing key will be used to create users
 #
-$ nsc edit account -n CHAT --sk ADCQ6MQXSOSLMFIW7J6EDLJO2NCQIH4C44YR3MOWS6QLQYQFDV2UXBHH
+$ nsc edit account -n CHAT --sk AAT6ZEPUN4QIP75K572IRETRJQJP2NJ7LU3FPHTNYSHDBUA4U5NOXNPQ
 [ OK ] added signing key "ADCQ6MQXSOSLMFIW7J6EDLJO2NCQIH4C44YR3MOWS6QLQYQFDV2UXBHH"
 [ OK ] edited account "CHAT"
 
@@ -71,7 +71,7 @@ $ nsc generate nkey --account ADMIN --store
 AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN
 account key stored /Users/wallyqs/repos/nats-dev/src/github.com/nats-io/kubecon2020/nsc/nkeys/keys/A/AE/AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN.nk
 
-$ nsc edit account -n ADMIN --sk AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN
+$ nsc edit account -n ADMIN --sk AD6Q2YIB5YETBUHTB72IMB4KCQI2YPRENU4A6LD6WGITKWK6BBSBV6UT
 [ OK ] added signing key "AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN"
 [ OK ] edited account "ADMIN"
 
@@ -88,7 +88,7 @@ This is in the ADMIN account, a user that is able to provision credentials.
 
 #+begin_src
 $ nsc add user -a ADMIN chat-access \
-   -K $NKEYS_PATH/keys/A/AE/AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN.nk \
+   -K $NKEYS_PATH/keys/A/D6/AD6Q2YIB5YETBUHTB72IMB4KCQI2YPRENU4A6LD6WGITKWK6BBSBV6UT.nk \
    --allow-sub 'chat.req.access' \
    --allow-sub 'chat.KUBECON.online' \
    --allow-pubsub 'chat.req.provisioned' \
@@ -110,7 +110,7 @@ This is a bootstrapping user shared by everyone, like a guest user.
 
 #+begin_src
 $ nsc add user -a ADMIN chat-creds-request \
-   -K $NKEYS_PATH/keys/A/AE/AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN.nk \
+   -K $NKEYS_PATH/keys/A/D6/AD6Q2YIB5YETBUHTB72IMB4KCQI2YPRENU4A6LD6WGITKWK6BBSBV6UT.nk \
    --allow-pubsub '_INBOX.>' \
    --allow-pubsub '_R_.>' \
    --allow-pub 'chat.req.access'
@@ -123,6 +123,8 @@ $ nsc describe jwt -f $NKEYS_PATH/creds/KO/ADMIN/chat-creds-request.creds
 #+begin_src
 nsc add export -a ADMIN --service -n chat-access  -s chat.req.access
 nsc add export -a CHAT  -n chat-online  -s chat.KUBECON.online
+
+rm ./nsc/accounts/nsc.json
 
 nsc add import -a CHAT  --service --src-account $(nsc list accounts 2>&1 | grep ADMIN | awk '{print $4}') -n chat-access --remote-subject chat.req.access   -s chat.req.access
 nsc add import -a ADMIN -n chat-online \
@@ -148,17 +150,6 @@ Start the NATS Server:
 nats-server -c conf/resolver.conf
 #+end_src
 
-Upload the accounts:
-
-#+begin_src sh
-nats-req -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep CHAT  | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/CHAT/CHAT.jwt)
-
-# FIXME: workaround to prevent colors matching in the line below.
-rm ./nsc/accounts/nsc.json
-
-nats-req -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep ADMIN | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/ADMIN/ADMIN.jwt)
-#+end_src
-
 ** Smoke test
 
 Create a mock admin responder:
@@ -173,7 +164,7 @@ Try to make a request:
 nats-req -creds $NKEYS_PATH/creds/KO/ADMIN/chat-creds-request.creds chat.req.access example
 #+end_src
 
-* Using the Chat Application
+* COMMENT Using the Chat Application
 
 ** Running the provisioner
 
@@ -219,11 +210,10 @@ You can find info here:
 
 https://docs.nats.io/nats-on-kubernetes/super-cluster-on-digital-ocean
 
-Let's create 2 clusters in Digital Ocean:
+Let's create a cluster in Digital Ocean:
 
 #+begin_src sh
 doctl kubernetes cluster create nats-k8s-sfo2 --count 3 --region sfo2
-doctl kubernetes cluster create nats-k8s-ams3 --count 3 --region ams3
 #+end_src
 
 ** Open up the firewall for the required ports
@@ -295,6 +285,10 @@ spec:
     targetPort: 443
 #+END_SRC
 
+#+begin_src 
+kubectl apply -f k8s/node-port.yaml
+#+end_src
+
 This will make it possible to reach out to the NATS cluster by using the =sfo.nats.chat= domain:
 
 #+BEGIN_SRC sh :results output
@@ -303,7 +297,7 @@ nslookup sfo.nats.chat
 
 ** Create load balancer for the websockets port
 
-#+begin_src 
+#+begin_src yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -339,19 +333,6 @@ helm repo update
 kubectl --context do-sfo2-nats-k8s-sfo2 create cm nats-accounts --from-file conf/resolver.conf
 #+end_src
 
-** Now upload the accounts
-
-Upload the accounts:
-
-#+begin_src sh
-nats-req -s tls://sfo.nats.chat:4222 -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep CHAT  | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/CHAT/CHAT.jwt)
-
-# FIXME: workaround to prevent colors matching in the line below.
-rm ./nsc/accounts/nsc.json
-
-nats-req -s tls://sfo.nats.chat:4222 -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep ADMIN | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/ADMIN/ADMIN.jwt)
-#+end_src
-
 ** Setup TLS
 
 We will need TLS for the websockets:
@@ -372,8 +353,8 @@ Secrets for the provisioner:
 
 #+begin_src 
 mkdir creds
-cp ./nsc/nkeys/keys/A/DO/ADOCR3GUZNV73Y4KL5PT7IKKZ3YVMZGHPMRILEMQQGUQIUU6YKD6WSLK.nk creds/sk.nk 
-cp ./nsc/nkeys/keys/O/AF/OAFO7GSRLNURD6KAHBV6LZ7RDVZJ2SSJZXPPYVR3GOHNCOEQ4GXDY3IN.nk creds/osk.nk
+cp ./nsc/nkeys/keys/A/AT/AAT6ZEPUN4QIP75K572IRETRJQJP2NJ7LU3FPHTNYSHDBUA4U5NOXNPQ.nk creds/sk.nk 
+cp ./nsc/nkeys/keys/O/C2/OC22KWMRNWFF4RAENUOU6DAH4LBEZSKEXMVA57ZQLTP3HJ37IELNV3FO.nk creds/osk.nk
 kubectl create secret generic nats-admin-creds \
         --from-file=./nsc/accounts/nats/KO/accounts/CHAT/CHAT.jwt \
         --from-file=./creds/osk.nk \
@@ -391,7 +372,19 @@ kubectl create secret generic nats-bootstrap-creds --from-file=bootstrap-creds=.
 * Create the NATS Cluster
 
 #+begin_src sh
-helm install nats nats/nats -f k8s/sfo-nats-server.yaml
+# helm install nats nats/nats -f k8s/sfo-nats-server.yaml
+helm install nats ./helm/helm/charts/nats -f k8s/sfo-nats-server.yaml
+#+end_src
+
+Upload the accounts:
+
+#+begin_src sh
+nats-req -s tls://sfo.nats.chat:4222 -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep CHAT  | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/CHAT/CHAT.jwt)
+
+# FIXME: workaround to prevent colors matching in the line below.
+rm ./nsc/accounts/nsc.json
+
+nats-req -s tls://sfo.nats.chat:4222 -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep ADMIN | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/ADMIN/ADMIN.jwt)
 #+end_src
 
 ** Deploy the applications
@@ -400,3 +393,16 @@ helm install nats nats/nats -f k8s/sfo-nats-server.yaml
 kubectl apply -f k8s/creds-provisioner.yaml
 kubectl apply -f k8s/chat-frontend-deploy.yaml
 #+end_src
+
+* Get some credentials
+
+#+begin_src 
+nats-req -s tls://sfo.nats.chat:4222 --creds ./nsc/nkeys/creds/KO/ADMIN/chat-creds-request.creds chat.req.access wallyqs 2> my.creds  
+#+end_src
+
+* Start the NATS Chat
+
+#+begin_src 
+nats-req -s tls://sfo.nats.chat:4222 --creds ../nsc/nkeys/creds/KO/ADMIN/chat-creds-request.creds chat.req.access wallyqs3 2> chat.creds  
+#+end_src
+

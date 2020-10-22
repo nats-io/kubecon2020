@@ -15,7 +15,7 @@ nats:
     key: "privkey.pem"
 
 cluster:
-  enabled: true
+  enabled: false
 
 auth:
   enabled: true

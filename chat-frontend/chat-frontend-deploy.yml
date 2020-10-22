@@ -9,7 +9,7 @@ spec:
     spec:
       containers:
       - name: nats-chat-frontend
-        image: synadia/nats-chat-frontend:1.0.0
+        image: synadia/nats-chat-frontend:1.0.1
         env:
         - name: WEBPACK_MODE
           value: production

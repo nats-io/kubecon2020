@@ -83,7 +83,7 @@ class Welcome extends React.Component {
 
   render() {
     if (this.state.redirect) {
-      return <Redirect to="/chat" />;
+      return <Redirect to="/" />;
     }
 
     const classes = this.props.classes;

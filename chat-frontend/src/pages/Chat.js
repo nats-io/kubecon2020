@@ -105,7 +105,13 @@ function MessageDisplay(props) {
   }
 
   return (
-    <Box px={1} py={3} height="90%" display="flex" flexDirection="column-reverse">
+    <Box
+      px={1}
+      py={3}
+      height="90%"
+      display="flex"
+      flexDirection="column-reverse"
+    >
       {messages}
     </Box>
   );
@@ -206,7 +212,7 @@ class Chat extends React.Component {
     this.state = {
       messageCompose: '',
       nc: null,
-      redirect: '',
+      redirect: false,
       curContext: chanKubecon,
       messages: {
         [chanGeneral]: [],
@@ -274,7 +280,7 @@ class Chat extends React.Component {
         // Handle server closing the connection.
         localStorage.removeItem('natschat.user.name');
         localStorage.removeItem('natschat.user.creds');
-        this.setState({redirect: "/"});
+        this.setState({redirect: true});
       });
 
       nc.publish(onlineStatus, sc.encode(JSON.stringify(this.getOnlineJwt())));
@@ -515,8 +521,8 @@ class Chat extends React.Component {
   }
 
   render() {
-    if (this.state.redirect !== '') {
-      return <Redirect to={this.state.redirect} />;
+    if (this.state.redirect) {
+      return <Redirect to="/welcome" />;
     }
 
     const classes = this.props.classes;

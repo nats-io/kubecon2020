@@ -1,0 +1,13 @@
+rbac:
+  create: true
+
+provider: digitalocean
+
+digitalocean:
+  apiToken: himitsu
+
+interval: "1m"
+
+policy: sync # or upsert-only
+
+# domainFilters: [ 'example.com' ]

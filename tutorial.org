@@ -392,3 +392,73 @@ nats-rply -s 164.90.192.226 -creds nsc/nkeys/creds/KO/KUBECON/chat-access.creds 
 #+begin_src sh
 nats-sub -s 188.166.236.158 -creds ./nsc/nkeys/creds/KO/SYS/sys.creds '>'
 #+end_src
+* Setting up external access for the NATS cluster
+
+** Deploying external-dns
+
+First deploy the external-dns component using the DigitalOcean provider:
+
+#+BEGIN_SRC sh
+echo '
+rbac:
+  create: true
+
+provider: digitalocean
+
+digitalocean:
+  apiToken: himitsu
+
+interval: "1m"
+
+policy: sync # or upsert-only
+' > k8s/external-dns.yaml
+
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm install external-dns bitnami/external-dns -f k8s/external-dns.yaml
+#+END_SRC
+
+** Create NodePort service
+
+This =NodePort= is required in order to be able to expose the host ports.
+
+#+BEGIN_SRC yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-nodeport
+  labels:
+    app: nats
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: sfo.nats.chat
+spec:
+  type: NodePort
+  selector:
+    app: nats
+  externalTrafficPolicy: Local
+  ports:
+  - name: client
+    port: 4222
+    nodePort: 30222
+    targetPort: 4222
+  - name: websocket
+    port: 443
+    nodePort: 30223
+    targetPort: 443
+#+END_SRC
+
+This will make it possible to reach out to the NATS cluster by using the =sfo.nats.chat= domain:
+
+#+BEGIN_SRC 
+nslookup sfo.nats.chat
+Server:		2001:558:feed::1
+Address:	2001:558:feed::1#53
+
+Non-authoritative answer:
+Name:	sfo.nats.chat
+Address: 165.232.63.15
+Name:	sfo.nats.chat
+Address: 165.232.63.98
+Name:	sfo.nats.chat
+Address: 143.110.128.15
+#+END_SRC
+

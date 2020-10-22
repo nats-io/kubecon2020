@@ -241,149 +241,6 @@ for firewall in `doctl compute firewall list | tail -n 3 | awk '{print $1}'`; do
 done
 #+end_src
 
-* Deploying NATS to a K8S Cluster
-
-** Add Helm NATS repos
-
-#+begin_src
-brew install helm
-helm repo add nats https://nats-io.github.io/k8s/helm/charts/
-helm repo update
-#+end_src
-
-** Upload the NATS Accounts bootstrap file
-
-#+begin_src sh
-for ctx in do-ams3-nats-k8s-ams3 do-sfo2-nats-k8s-sfo2; do
-  kubectl --context $ctx create cm nats-accounts --from-file conf/resolver.conf
-done
-#+end_src
-
-** COMMENT Configure gateway connections
-
-Using explicit URL endpoints though we could use external-dns instead for this:
-
-#+begin_src sh :results output
-for ctx in do-sfo2-nats-k8s-sfo2 do-ams3-nats-k8s-ams3; do
-  echo "    - name: $ctx"
-  echo "      urls:"
-  for externalIP in `kubectl --context $ctx get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="ExternalIP")].address}'`; do
-    echo "        - nats://$externalIP:7522";
-  done
-  echo
-done
-#+end_src
-
-** COMMENT Super Cluster YAML
-
-#+begin_src yaml :tangle conf/super-cluster.yaml
-nats:
-  image: synadia/nats-server:nightly
-
-  # Bind a host port from the host for each one of the pods.
-  externalAccess: true
-
-  logging:
-    debug: false
-    trace: false
-
-cluster:
-  enabled: true
-
-auth:
-  enabled: true
-
-  resolver:
-    ############################
-    #                          #
-    # Memory resolver settings #
-    #                          #
-    ##############################
-    type: memory
-
-    #
-    # Use a configmap reference which will be mounted
-    # into the container.
-    #
-    configMap:
-      name: nats-accounts
-      key: resolver.conf
-
-gateway:
-  enabled: true
-
-  # NOTE: defined via --set gateway.name="$ctx"
-  # name: $ctx
-
-  gateways:
-    - name: do-ams3-nats-k8s-ams3
-      urls:
-        - nats://164.90.192.194:7522
-        - nats://164.90.192.226:7522
-        - nats://164.90.192.80:7522
-
-    - name: do-sgp1-nats-k8s-sgp1
-      urls:
-        - nats://188.166.236.158:7522
-        - nats://188.166.232.25:7522
-        - nats://188.166.236.155:7522
-
-    - name: do-sfo2-nats-k8s-sfo2
-      urls:
-        - nats://64.227.50.254:7522
-        - nats://64.227.54.26:7522
-        - nats://138.197.219.203:7522
-
-natsbox:
-  enabled: true
-#+end_src
-
-#+begin_src sh
-for ctx in do-ams3-nats-k8s-ams3  do-sfo2-nats-k8s-sfo2 do-sgp1-nats-k8s-sgp1; do
-  helm --kube-context $ctx install nats nats/nats -f conf/super-cluster.yaml --set gateway.name=$ctx
-  # helm --kube-context $ctx delete nats
-done
-#+end_src
-
-** COMMENT Confirm the setup
-
-- Peek at the connect_urls and confirm that the routes are present.
-
-#+begin_src
-telnet 188.166.232.25 4222
-#+end_src
-
-Try to make a request from SF:
-
-#+begin_src
-nats-req -s 138.197.219.203 -creds nsc/nkeys/creds/KO/KUBECON/chat-creds-request.creds chat.req.access example
-#+end_src
-
-Create a mock responder in AMS:
-
-#+begin_src sh
-nats-rply -s 164.90.192.226 -creds nsc/nkeys/creds/KO/KUBECON/chat-access.creds chat.req.access example
-#+end_src
-
-** Now upload the accounts
-
-Upload the accounts:
-
-#+begin_src sh
-nats-req -s tls://sfo.nats.chat:4222 -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep CHAT  | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/CHAT/CHAT.jwt)
-
-# FIXME: workaround to prevent colors matching in the line below.
-rm ./nsc/accounts/nsc.json
-
-nats-req -s tls://sfo.nats.chat:4222 -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep ADMIN | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/ADMIN/ADMIN.jwt)
-#+end_src
-** 
-
-* COMMENT Using the System account
-
-#+begin_src sh
-nats-sub -s 188.166.236.158 -creds ./nsc/nkeys/creds/KO/SYS/sys.creds '>'
-#+end_src
 * Setting up external access for the NATS cluster
 
 ** Deploying external-dns
@@ -440,17 +297,106 @@ spec:
 
 This will make it possible to reach out to the NATS cluster by using the =sfo.nats.chat= domain:
 
-#+BEGIN_SRC 
+#+BEGIN_SRC sh :results output
 nslookup sfo.nats.chat
-Server:		2001:558:feed::1
-Address:	2001:558:feed::1#53
-
-Non-authoritative answer:
-Name:	sfo.nats.chat
-Address: 165.232.63.15
-Name:	sfo.nats.chat
-Address: 165.232.63.98
-Name:	sfo.nats.chat
-Address: 143.110.128.15
 #+END_SRC
 
+** Create load balancer for the websockets port
+
+#+begin_src 
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-lb
+spec:
+  type: LoadBalancer
+  selector:
+    app: nats-chat-frontend
+  ports:
+    # - protocol: TCP
+    #   port: 4222
+    #   targetPort: 4222
+    #   name: client
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+      name: websocket
+#+end_src
+
+* Deploying NATS to a K8S Cluster
+
+** Add Helm NATS repos
+
+#+begin_src
+brew install helm
+helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+helm repo update
+#+end_src
+
+** Upload the NATS Accounts bootstrap file
+
+#+begin_src sh
+kubectl --context do-sfo2-nats-k8s-sfo2 create cm nats-accounts --from-file conf/resolver.conf
+#+end_src
+
+** Now upload the accounts
+
+Upload the accounts:
+
+#+begin_src sh
+nats-req -s tls://sfo.nats.chat:4222 -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep CHAT  | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/CHAT/CHAT.jwt)
+
+# FIXME: workaround to prevent colors matching in the line below.
+rm ./nsc/accounts/nsc.json
+
+nats-req -s tls://sfo.nats.chat:4222 -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep ADMIN | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/ADMIN/ADMIN.jwt)
+#+end_src
+
+** Setup TLS
+
+We will need TLS for the websockets:
+
+#+begin_src 
+kubectl create secret generic nats-tls \
+        --from-file=letsencrypt/live/sfo.nats.chat/fullchain.pem \
+        --from-file=letsencrypt/live/sfo.nats.chat/privkey.pem
+
+kubectl create secret generic nats-frontend-tls \
+        --from-file=letsencrypt/live/nats.chat/fullchain.pem \
+        --from-file=letsencrypt/live/nats.chat/privkey.pem
+#+end_src
+
+** Create the secrets
+
+Secrets for the provisioner:
+
+#+begin_src 
+mkdir creds
+cp ./nsc/nkeys/keys/A/DO/ADOCR3GUZNV73Y4KL5PT7IKKZ3YVMZGHPMRILEMQQGUQIUU6YKD6WSLK.nk creds/sk.nk 
+cp ./nsc/nkeys/keys/O/AF/OAFO7GSRLNURD6KAHBV6LZ7RDVZJ2SSJZXPPYVR3GOHNCOEQ4GXDY3IN.nk creds/osk.nk
+kubectl create secret generic nats-admin-creds \
+        --from-file=./nsc/accounts/nats/KO/accounts/CHAT/CHAT.jwt \
+        --from-file=./creds/osk.nk \
+        --from-file=./creds/sk.nk \
+        --from-file=./nsc/nkeys/creds/KO/SYS/sys.creds \
+        --from-file=./nsc/nkeys/creds/KO/ADMIN/chat-access.creds
+#+end_src
+
+Generic bootstrap credentials for users:
+
+#+begin_src sh
+kubectl create secret generic nats-bootstrap-creds --from-file=bootstrap-creds=./nsc/nkeys/creds/KO/ADMIN/chat-creds-request.creds
+#+end_src
+
+* Create the NATS Cluster
+
+#+begin_src sh
+helm install nats nats/nats -f k8s/sfo-nats-server.yaml
+#+end_src
+
+** Deploy the applications
+
+#+begin_src sh
+kubectl apply -f k8s/creds-provisioner.yaml
+kubectl apply -f k8s/chat-frontend-deploy.yaml
+#+end_src

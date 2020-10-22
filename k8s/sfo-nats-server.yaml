@@ -31,6 +31,15 @@ auth:
 natsbox:
   enabled: false
 
+leafnodes:
+  enabled: true
+
+  tls:
+    secret:
+      name: nats-tls
+    cert: "fullchain.pem"
+    key: "privkey.pem"
+
 websocket:
   enabled: true
   port: 443

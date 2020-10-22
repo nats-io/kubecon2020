@@ -18,7 +18,7 @@ git clone https://github.com/nats-io/kubecon2020
 
 ** Installing NSC
 
-#+begin_src 
+#+begin_src
 curl -LO https://raw.githubusercontent.com/nats-io/nsc/master/install.sh
 less install.sh
 sh ./install.sh
@@ -28,73 +28,126 @@ sh ./install.sh
 
 #+begin_src sh
 curl -fSl https://nats-io.github.io/k8s/setup/nsc-setup.sh | sh
+source .nsc.env
 #+end_src
 
 ** Inspect NSC objects
 
 #+begin_src sh
 tree nsc/ | less
-nsc describe jwt -f nsc/accounts/nats/KO/KO.jwt 
+nsc describe jwt -f nsc/accounts/nats/KO/KO.jwt
 #+end_src
 
-** Creating the KUBECON account
+** Creating the accounts
+
+- We will separate the system into two accounts:
+  + An ADMIN account for management of users (create/revoke)
+  + An CHAT account for the users to interact with each other.
 
 - We need 3 users at least:
-  + Chat Credentials Requestor
-  + Credentials Provisioner
-  + Chat User :: Will be dynamically generated
+  + Admin User          :: Credentials Provisioner and revocation
+  + Chat User           :: Dynamically generated
+  + Bootstrap User      :: Chat Credentials Requestor
 
 #+begin_src sh
-nsc add account --name KUBECON
+nsc add account --name CHAT
+nsc add account --name ADMIN
 nsc list accounts
-nsc describe jwt -f ./nsc/accounts/nats/KO/accounts/KUBECON/KUBECON.jwt
+nsc describe jwt -f ./nsc/accounts/nats/KO/accounts/CHAT/CHAT.jwt
+nsc describe jwt -f ./nsc/accounts/nats/KO/accounts/ADMIN/ADMIN.jwt
 #+end_src
 
-** Add a new signing key for KUBECON account
+** Add a new signing key for CHAT and ADMIN accounts
 
 This is needed to be able to create users dynamically by the credentials provisioner.
 
 #+begin_src sh
-nsc generate nkey --account --store 
-nsc edit account --sk ACUIKNKJIAPABWJSIJM4GFYLQLL7RUWEBI2BIZYUINPWV5432ZOAEDV4
-nsc describe jwt -f ./nsc/accounts/nats/KO/accounts/KUBECON/KUBECON.jwt
+$ nsc generate nkey --account CHAT --store
+ADCQ6MQXSOSLMFIW7J6EDLJO2NCQIH4C44YR3MOWS6QLQYQFDV2UXBHH
+account key stored /Users/wallyqs/repos/nats-dev/src/github.com/nats-io/kubecon2020/nsc/nkeys/keys/A/DC/ADCQ6MQXSOSLMFIW7J6EDLJO2NCQIH4C44YR3MOWS6QLQYQFDV2UXBHH.nk
+
+#
+# This signing key will be used to create users
+#
+$ nsc edit account -n CHAT --sk AAT6ZEPUN4QIP75K572IRETRJQJP2NJ7LU3FPHTNYSHDBUA4U5NOXNPQ
+[ OK ] added signing key "ADCQ6MQXSOSLMFIW7J6EDLJO2NCQIH4C44YR3MOWS6QLQYQFDV2UXBHH"
+[ OK ] edited account "CHAT"
+
+$ nsc generate nkey --account ADMIN --store
+AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN
+account key stored /Users/wallyqs/repos/nats-dev/src/github.com/nats-io/kubecon2020/nsc/nkeys/keys/A/AE/AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN.nk
+
+$ nsc edit account -n ADMIN --sk AD6Q2YIB5YETBUHTB72IMB4KCQI2YPRENU4A6LD6WGITKWK6BBSBV6UT
+[ OK ] added signing key "AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN"
+[ OK ] edited account "ADMIN"
+
+$ nsc describe jwt -f ./nsc/accounts/nats/KO/accounts/CHAT/CHAT.jwt | grep Signing
+│ Signing Keys              │ ADCQ6MQXSOSLMFIW7J6EDLJO2NCQIH4C44YR3MOWS6QLQYQFDV2UXBHH │
+
+$ nsc describe jwt -f ./nsc/accounts/nats/KO/accounts/ADMIN/ADMIN.jwt | grep Signing
+│ Signing Keys              │ AAEYWYQI7LICX2ZRIGVDKJYEAV7V3YK6BEDVDOBOVSGBJT3NB24QMIYN │
 #+end_src
 
 ** Create user for the credentials provisioner
 
-#+begin_src 
-nsc add user chat-access \
-   -K $NKEYS_PATH/keys/A/AO/AAOEOFBQCJKEJ7XZLLSHKVCERH34OPZOIJMOUUVW7QKESQ2KT33JZDRI.nk \
-   --allow-sub 'chat.req.access' \
-   --allow-pubsub '_INBOX.>' \
-   --allow-pubsub '_R_' \
-   --allow-pubsub '_R_.>'
+This is in the ADMIN account, a user that is able to provision credentials.
 
-nsc describe jwt -f $NKEYS_PATH/creds/KO/KUBECON/chat-access.creds
+#+begin_src
+$ nsc add user -a ADMIN chat-access \
+   -K $NKEYS_PATH/keys/A/D6/AD6Q2YIB5YETBUHTB72IMB4KCQI2YPRENU4A6LD6WGITKWK6BBSBV6UT.nk \
+   --allow-sub 'chat.req.access' \
+   --allow-sub 'chat.KUBECON.online' \
+   --allow-pubsub 'chat.req.provisioned' \
+   --allow-pubsub 'chat.req.provisioned.updates' \
+   --allow-pubsub 'chat.req.revoke' \
+   --allow-pubsub '_INBOX.>' \
+   --allow-pubsub '_R_.>' \
+   --allow-pub-response
+[ OK ] generated and stored user key "UALGE5RGSDC3DC4DWIO2KU6Y2R35F6UWKD4GGDBL3TTMXROPKKAPRZBQ"
+[ OK ] generated user creds file `~/repos/nats-dev/src/github.com/nats-io/kubecon2020/nsc/nkeys/creds/KO/ADMIN/chat-access.creds`
+[ OK ] added user "chat-access" to account "ADMIN"
+
+$ nsc describe jwt -f $NKEYS_PATH/creds/KO/ADMIN/chat-access.creds
 #+end_src
 
 ** Create user for the credentials request
 
-#+begin_src 
-nsc add user chat-creds-request \
-   -K $NKEYS_PATH/keys/A/AO/AAOEOFBQCJKEJ7XZLLSHKVCERH34OPZOIJMOUUVW7QKESQ2KT33JZDRI.nk \
-   --allow-pub 'chat.req.access' \
-   --allow-pubsub '_INBOX.>' \
-   --allow-pubsub '_R_' \
-   --allow-pubsub '_R_.>'
+This is a bootstrapping user shared by everyone, like a guest user.
 
-nsc describe jwt -f $NKEYS_PATH/creds/KO/KUBECON/chat-creds-request.creds
+#+begin_src
+$ nsc add user -a ADMIN chat-creds-request \
+   -K $NKEYS_PATH/keys/A/D6/AD6Q2YIB5YETBUHTB72IMB4KCQI2YPRENU4A6LD6WGITKWK6BBSBV6UT.nk \
+   --allow-pubsub '_INBOX.>' \
+   --allow-pubsub '_R_.>' \
+   --allow-pub 'chat.req.access'
+
+$ nsc describe jwt -f $NKEYS_PATH/creds/KO/ADMIN/chat-creds-request.creds
 #+end_src
 
-** Confirm setup locally
+** Add the export and import
+
+#+begin_src
+nsc add export -a ADMIN --service -n chat-access  -s chat.req.access
+nsc add export -a CHAT  -n chat-online  -s chat.KUBECON.online
+
+rm ./nsc/accounts/nsc.json
+
+nsc add import -a CHAT  --service --src-account $(nsc list accounts 2>&1 | grep ADMIN | awk '{print $4}') -n chat-access --remote-subject chat.req.access   -s chat.req.access
+nsc add import -a ADMIN -n chat-online \
+    --src-account $(nsc list accounts 2>&1 | grep CHAT | awk '{print $4}') \
+    --remote-subject chat.KUBECON.online
+#+end_src
+
+** Setting up the NATS Server locally
 
 Generate the NATS configuration.
 
 #+begin_src sh :results output
-source .nsc.env 
+source .nsc.env
 nsc list accounts
-nsc generate config --mem-resolver --sys-account SYS
-nsc generate config --mem-resolver --sys-account SYS > conf/resolver.conf
+mkdir conf jwt
+nsc generate config --sys-account SYS --nats-resolver > conf/resolver.conf
+cat conf/resolver.conf
 #+end_src
 
 Start the NATS Server:
@@ -103,36 +156,56 @@ Start the NATS Server:
 nats-server -c conf/resolver.conf
 #+end_src
 
-Try to make a request:
+** Smoke test
 
-#+begin_src 
-nats-req -creds nsc/nkeys/creds/KO/KUBECON/chat-creds-request.creds chat.req.access example
-#+end_src
-
-Create a mock responder:
+Create a mock admin responder:
 
 #+begin_src sh
-nats-rply -creds nsc/nkeys/creds/KO/KUBECON/chat-access.creds chat.req.access example
+nats-rply -creds $NKEYS_PATH/creds/KO/ADMIN/chat-access.creds chat.req.access example
 #+end_src
 
-* Using the Chat Application
+Try to make a request:
+
+#+begin_src sh
+nats-req -creds $NKEYS_PATH/creds/KO/ADMIN/chat-creds-request.creds chat.req.access example
+#+end_src
+
+* COMMENT Using the Chat Application
 
 ** Running the provisioner
 
-#+begin_src 
-cd chat-access
-go run main.go --acc $NSC_HOME/nats/KO/accounts/KUBECON/KUBECON.jwt \
-    --sk $NKEYS_PATH/keys/A/AO/AAOEOFBQCJKEJ7XZLLSHKVCERH34OPZOIJMOUUVW7QKESQ2KT33JZDRI.nk \
-    --creds $NKEYS_PATH/creds/KO/KUBECON/chat-access.creds  
+Run the provisioner with the public JWT of the CHAT account and the signing key
+to create users under the CHAT account.
+
+#+begin_src
+go run main.go --acc $NSC_HOME/nats/KO/accounts/CHAT/CHAT.jwt \
+    --sk $NKEYS_PATH/keys/A/DC/ADCQ6MQXSOSLMFIW7J6EDLJO2NCQIH4C44YR3MOWS6QLQYQFDV2UXBHH.nk \
+    --creds $NKEYS_PATH/creds/KO/ADMIN/chat-access.creds
+    --osk $NKEYS_PATH/keys/O/AQ/OAQFB4CLUH2SZR7HOQAV6E7G4INPW36S7YBB5KLUZ3ABLWPWJ4FTRRTA.nk \
+    --syscreds $NKEYS_PATH/creds/KO/SYS/sys.creds
 #+end_src
 
-** Getting some credentials and starting the app
+** Getting some credentials
 
-#+begin_src 
-cd chat
-nats-req -creds nsc/nkeys/creds/KO/KUBECON/chat-creds-request.creds chat.req.access wallyqs 2> my.creds
-go build ./...
-./chat -creds my.creds
+#+begin_src
+nats-req -creds nsc/nkeys/creds/KO/ADMIN/chat-creds-request.creds chat.req.access wallyqs 2> my.creds
+#+end_src
+
+** Starting the Chat app
+
+#+begin_src sh
+cd ./chat
+go build
+./chat --creds ../my.creds
+#+end_src
+
+** Revoking a user
+
+To revoke:
+
+#+begin_src sh
+nsc revocations add_user -a ADMIN -u UCQYJLDPMVWHETFPF3ZT5DKCVAKGPX33KEZC6DZUHL3DB3VBYNJATOQQ
+nats-req -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep ADMIN   | awk '{print $4}').CLAIMS.UPDATE" $(cat $NSC_HOME/nats/KO/accounts/ADMIN/ADMIN.jwt)
 #+end_src
 
 * Deploying to K8S: Infra setup
@@ -143,12 +216,10 @@ You can find info here:
 
 https://docs.nats.io/nats-on-kubernetes/super-cluster-on-digital-ocean
 
-Let's create 3 clusters in Digital Ocean:
+Let's create a cluster in Digital Ocean:
 
 #+begin_src sh
 doctl kubernetes cluster create nats-k8s-sfo2 --count 3 --region sfo2
-doctl kubernetes cluster create nats-k8s-sgp1 --count 3 --region sgp1
-doctl kubernetes cluster create nats-k8s-ams3 --count 3 --region ams3
 #+end_src
 
 ** Open up the firewall for the required ports
@@ -156,6 +227,7 @@ doctl kubernetes cluster create nats-k8s-ams3 --count 3 --region ams3
 - 4222 is the client port
 - 7422 is the port for leafnodes
 - 7522 is the port for gateway connections (cluster of clusters)
+- 443 is the websocket port
 
 #+begin_src sh
 for firewall in `doctl compute firewall list | tail -n 3 | awk '{print $1}'`; do
@@ -165,156 +237,178 @@ for firewall in `doctl compute firewall list | tail -n 3 | awk '{print $1}'`; do
 done
 #+end_src
 
+* Setting up external access for the NATS cluster
+
+** Deploying external-dns
+
+First deploy the external-dns component using the DigitalOcean provider:
+
+#+BEGIN_SRC sh
+echo '
+rbac:
+  create: true
+
+provider: digitalocean
+
+digitalocean:
+  apiToken: himitsu
+
+interval: "1m"
+
+policy: sync # or upsert-only
+' > k8s/external-dns.yaml
+
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm install external-dns bitnami/external-dns -f k8s/external-dns.yaml
+#+END_SRC
+
+** Create NodePort service to create A records for each server
+
+This =NodePort= is required in order to be able to expose the host ports.
+
+#+BEGIN_SRC yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-nodeport
+  labels:
+    app: nats
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: sfo.nats.chat
+spec:
+  type: NodePort
+  selector:
+    app: nats
+  externalTrafficPolicy: Local
+  ports:
+  - name: client
+    port: 4222
+    nodePort: 30222
+    targetPort: 4222
+  - name: websocket
+    port: 443
+    nodePort: 30223
+    targetPort: 443
+#+END_SRC
+
+#+begin_src 
+kubectl apply -f k8s/node-port.yaml
+#+end_src
+
+This will make it possible to reach out to the NATS cluster by using the =sfo.nats.chat= domain:
+
+#+BEGIN_SRC sh :results output
+nslookup sfo.nats.chat
+#+END_SRC
+
+** Create load balancer for the websockets port
+
+#+begin_src yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-lb
+spec:
+  type: LoadBalancer
+  selector:
+    app: nats-chat-frontend
+  ports:
+    # - protocol: TCP
+    #   port: 4222
+    #   targetPort: 4222
+    #   name: client
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+      name: websocket
+#+end_src
+
 * Deploying NATS to a K8S Cluster
 
 ** Add Helm NATS repos
 
-#+begin_src 
+#+begin_src
 brew install helm
 helm repo add nats https://nats-io.github.io/k8s/helm/charts/
-helm repo update   
+helm repo update
 #+end_src
 
-** Upload the memory resolver with the NATS accounts
+** Upload the NATS Accounts bootstrap file
 
 #+begin_src sh
-for ctx in do-ams3-nats-k8s-ams3 do-sfo2-nats-k8s-sfo2 do-sgp1-nats-k8s-sgp1; do
-  kubectl --context $ctx create cm nats-accounts --from-file conf/resolver.conf
-  # kubectl --context $ctx delete cm nats-accounts
-done   
+kubectl --context do-sfo2-nats-k8s-sfo2 create cm nats-accounts --from-file conf/resolver.conf
 #+end_src
 
-** Configure gateway connections
+** Setup TLS
 
-Using explicit URL endpoints though we could use [[https://github.com/kubernetes-sigs/external-dns][external-dns]] instead for this:
-
-#+begin_src sh :results output
-for ctx in do-ams3-nats-k8s-ams3 do-sgp1-nats-k8s-sgp1 do-sfo2-nats-k8s-sfo2; do
-  echo "    - name: $ctx"
-  echo "      urls:"
-  for externalIP in `kubectl --context $ctx get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="ExternalIP")].address}'`; do 
-    echo "        - nats://$externalIP:7522"; 
-  done
-  echo
-done   
-#+end_src
-
-#+begin_example
-    - name: do-ams3-nats-k8s-ams3
-      urls:
-        - nats://164.90.192.194:7522
-        - nats://164.90.192.226:7522
-        - nats://164.90.192.80:7522
-
-    - name: do-sgp1-nats-k8s-sgp1
-      urls:
-        - nats://188.166.236.158:7522
-        - nats://188.166.232.25:7522
-        - nats://188.166.236.155:7522
-
-    - name: do-sfo2-nats-k8s-sfo2
-      urls:
-        - nats://64.227.50.254:7522
-        - nats://64.227.54.26:7522
-        - nats://138.197.219.203:7522
-
-#+end_example
-
-** Super Cluster YAML
-
-#+begin_src yaml :tangle conf/super-cluster.yaml
-nats:
-  image: nats:alpine
-
-  # Bind a host port from the host for each one of the pods.
-  externalAccess: true
-
-  logging:
-    debug: false
-    trace: false
-
-cluster:
-  enabled: true
-
-auth:
-  enabled: true
-
-  resolver:
-    ############################
-    #                          #
-    # Memory resolver settings #
-    #                          #
-    ##############################
-    type: memory
-
-    # 
-    # Use a configmap reference which will be mounted
-    # into the container.
-    # 
-    configMap:
-      name: nats-accounts
-      key: resolver.conf
-
-gateway:
-  enabled: true
-
-  # NOTE: defined via --set gateway.name="$ctx"
-  # name: $ctx
-
-  gateways:
-    - name: do-ams3-nats-k8s-ams3
-      urls:
-        - nats://164.90.192.194:7522
-        - nats://164.90.192.226:7522
-        - nats://164.90.192.80:7522
-
-    - name: do-sgp1-nats-k8s-sgp1
-      urls:
-        - nats://188.166.236.158:7522
-        - nats://188.166.232.25:7522
-        - nats://188.166.236.155:7522
-
-    - name: do-sfo2-nats-k8s-sfo2
-      urls:
-        - nats://64.227.50.254:7522
-        - nats://64.227.54.26:7522
-        - nats://138.197.219.203:7522
-
-natsbox:
-  enabled: true   
-#+end_src
-
-#+begin_src sh
-for ctx in do-ams3-nats-k8s-ams3  do-sfo2-nats-k8s-sfo2 do-sgp1-nats-k8s-sgp1; do
-  helm --kube-context $ctx install nats nats/nats -f conf/super-cluster.yaml --set gateway.name=$ctx
-  # helm --kube-context $ctx delete nats
-done
-#+end_src
-
-** Confirm the setup
-
-- Peek at the connect_urls and confirm that the routes are present.
+We will need TLS for the websockets:
 
 #+begin_src 
-telnet 188.166.232.25 4222
+kubectl create secret generic nats-tls \
+        --from-file=letsencrypt/live/sfo.nats.chat/fullchain.pem \
+        --from-file=letsencrypt/live/sfo.nats.chat/privkey.pem
+
+kubectl create secret generic nats-frontend-tls \
+        --from-file=letsencrypt/live/nats.chat/fullchain.pem \
+        --from-file=letsencrypt/live/nats.chat/privkey.pem
 #+end_src
 
-Try to make a request from SF:
+** Create the secrets
+
+Secrets for the provisioner:
 
 #+begin_src 
-nats-req -s 138.197.219.203 -creds nsc/nkeys/creds/KO/KUBECON/chat-creds-request.creds chat.req.access example
+mkdir creds
+cp ./nsc/nkeys/keys/A/AT/AAT6ZEPUN4QIP75K572IRETRJQJP2NJ7LU3FPHTNYSHDBUA4U5NOXNPQ.nk creds/sk.nk 
+cp ./nsc/nkeys/keys/O/C2/OC22KWMRNWFF4RAENUOU6DAH4LBEZSKEXMVA57ZQLTP3HJ37IELNV3FO.nk creds/osk.nk
+kubectl create secret generic nats-admin-creds \
+        --from-file=./nsc/accounts/nats/KO/accounts/CHAT/CHAT.jwt \
+        --from-file=./creds/osk.nk \
+        --from-file=./creds/sk.nk \
+        --from-file=./nsc/nkeys/creds/KO/SYS/sys.creds \
+        --from-file=./nsc/nkeys/creds/KO/ADMIN/chat-access.creds
 #+end_src
 
-Create a mock responder in AMS:
+Generic bootstrap credentials for users:
 
 #+begin_src sh
-nats-rply -s 164.90.192.226 -creds nsc/nkeys/creds/KO/KUBECON/chat-access.creds chat.req.access example
+kubectl create secret generic nats-bootstrap-creds --from-file=bootstrap-creds=./nsc/nkeys/creds/KO/ADMIN/chat-creds-request.creds
 #+end_src
 
-* Using the System account
+* Create the NATS Cluster
 
 #+begin_src sh
-nats-sub -s 188.166.236.158 -creds ./nsc/nkeys/creds/KO/SYS/sys.creds '>'  
+# helm install nats nats/nats -f k8s/sfo-nats-server.yaml
+helm install nats ./helm/helm/charts/nats -f k8s/sfo-nats-server.yaml
 #+end_src
 
+Upload the accounts:
+
+#+begin_src sh
+nats-req -s tls://sfo.nats.chat:4222 -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep CHAT  | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/CHAT/CHAT.jwt)
+
+# FIXME: workaround to prevent colors matching in the line below.
+rm ./nsc/accounts/nsc.json
+
+nats-req -s tls://sfo.nats.chat:4222 -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep ADMIN | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/ADMIN/ADMIN.jwt)
+#+end_src
+
+** Deploy the applications
+
+#+begin_src sh
+kubectl apply -f k8s/creds-provisioner.yaml
+kubectl apply -f k8s/chat-frontend-deploy.yaml
+#+end_src
+
+* Get some credentials
+
+#+begin_src 
+nats-req -s tls://sfo.nats.chat:4222 --creds ./nsc/nkeys/creds/KO/ADMIN/chat-creds-request.creds chat.req.access wallyqs 2> my.creds  
+#+end_src
+
+* Start the NATS Chat
+
+#+begin_src 
+nats-req -s tls://sfo.nats.chat:4222 --creds ../nsc/nkeys/creds/KO/ADMIN/chat-creds-request.creds chat.req.access wallyqs3 2> chat.creds  
+#+end_src
 

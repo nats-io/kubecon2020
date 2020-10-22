@@ -15,6 +15,7 @@ spec:
           value: production
         - name: SERVER_URL
           value: wss://sfo.nats.chat:443
+        # TODO(jaime): Fix creds must be 1 line with newlines escaped.
         - name: BOOTSTRAP_CREDS
           valueFrom:
             secretKeyRef:

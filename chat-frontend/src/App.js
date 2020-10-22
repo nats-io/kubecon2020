@@ -43,10 +43,10 @@ const theme = createMuiTheme({
 function AppRoute(props) {
   const hasUserCreds = localStorage.getItem('natschat.user.creds') !== null;
   let redirectTo = "";
-  if (props.path === "/" && hasUserCreds) {
-    redirectTo = "/chat";
-  } else if (props.path === "/chat" && !hasUserCreds) {
+  if (props.path === "/welcome" && hasUserCreds) {
     redirectTo = "/";
+  } else if (props.path === "/" && !hasUserCreds) {
+    redirectTo = "/welcome";
   }
 
   if (redirectTo !== "") {
@@ -78,8 +78,8 @@ class App extends React.Component {
         <BrowserRouter>
           <Switch>
             <AppRoute path="/admin" component={Admin} />
-            <AppRoute path="/chat" component={Chat} />
-            <AppRoute path="/" component={Welcome} />
+            <AppRoute path="/welcome" component={Welcome} />
+            <AppRoute path="/" component={Chat} />
           </Switch>
         </BrowserRouter>
       </ThemeProvider>

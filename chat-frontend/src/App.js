@@ -11,8 +11,8 @@ import Admin from './pages/Admin';
 
 // These values get populated in the build artifact at compile time.
 const natsInfo = {
-  url: '%%NATS_URL%%',
-  bootstrapCreds: '%%NATS_BOOTSTRAP_CREDS%%',
+  url: NATS_SERVER_URL,
+  bootstrapCreds: NATS_BOOTSTRAP_CREDS,
 };
 
 const theme = createMuiTheme({

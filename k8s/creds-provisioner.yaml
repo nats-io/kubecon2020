@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats-creds-provisioner
+  labels:
+    app: nats-creds-provisioner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nats-creds-provisioner
+  template:
+    metadata:
+      labels:
+        app: nats-creds-provisioner
+    spec:
+      volumes:
+      - name: nats-admin-creds
+        secret:
+         secretName: nats-admin-creds
+      containers:
+      - name: nats-creds-provisioner
+        image: synadia/nats-creds-provisioner:0.1.0
+        imagePullPolicy: IfNotPresent
+        command:
+        - /usr/local/bin/chat-access
+        - -s=tls://sfo.nats.chat:4222
+        - -acc=/etc/nats/creds/CHAT.jwt
+        - -sk=/etc/nats/creds/sk.nk
+        - -osk=/etc/nats/creds/osk.nk
+        - -creds=/etc/nats/creds/chat-access.creds
+        - -syscreds=/etc/nats/creds/sys.creds
+        volumeMounts:
+        - mountPath: /etc/nats/creds
+          name: nats-admin-creds

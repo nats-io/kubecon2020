@@ -211,7 +211,7 @@ nsc revocations add_user -a ADMIN -u UCQYJLDPMVWHETFPF3ZT5DKCVAKGPX33KEZC6DZUHL3
 nats-req -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep ADMIN   | awk '{print $4}').CLAIMS.UPDATE" $(cat $NSC_HOME/nats/KO/accounts/ADMIN/ADMIN.jwt)
 #+end_src
 
-* COMMENT Deploying to K8S: Infra setup
+* Deploying to K8S: Infra setup
 
 ** Creating K8S clusters for NATS
 
@@ -219,11 +219,10 @@ You can find info here:
 
 https://docs.nats.io/nats-on-kubernetes/super-cluster-on-digital-ocean
 
-Let's create 3 clusters in Digital Ocean:
+Let's create 2 clusters in Digital Ocean:
 
 #+begin_src sh
 doctl kubernetes cluster create nats-k8s-sfo2 --count 3 --region sfo2
-doctl kubernetes cluster create nats-k8s-sgp1 --count 3 --region sgp1
 doctl kubernetes cluster create nats-k8s-ams3 --count 3 --region ams3
 #+end_src
 
@@ -232,6 +231,7 @@ doctl kubernetes cluster create nats-k8s-ams3 --count 3 --region ams3
 - 4222 is the client port
 - 7422 is the port for leafnodes
 - 7522 is the port for gateway connections (cluster of clusters)
+- 443 is the websocket port
 
 #+begin_src sh
 for firewall in `doctl compute firewall list | tail -n 3 | awk '{print $1}'`; do
@@ -241,7 +241,7 @@ for firewall in `doctl compute firewall list | tail -n 3 | awk '{print $1}'`; do
 done
 #+end_src
 
-* COMMENT Deploying NATS to a K8S Cluster
+* Deploying NATS to a K8S Cluster
 
 ** Add Helm NATS repos
 
@@ -251,21 +251,20 @@ helm repo add nats https://nats-io.github.io/k8s/helm/charts/
 helm repo update
 #+end_src
 
-** Upload the memory resolver with the NATS accounts
+** Upload the NATS Accounts bootstrap file
 
 #+begin_src sh
-for ctx in do-ams3-nats-k8s-ams3 do-sfo2-nats-k8s-sfo2 do-sgp1-nats-k8s-sgp1; do
+for ctx in do-ams3-nats-k8s-ams3 do-sfo2-nats-k8s-sfo2; do
   kubectl --context $ctx create cm nats-accounts --from-file conf/resolver.conf
-  # kubectl --context $ctx delete cm nats-accounts
 done
 #+end_src
 
-** Configure gateway connections
+** COMMENT Configure gateway connections
 
 Using explicit URL endpoints though we could use external-dns instead for this:
 
 #+begin_src sh :results output
-for ctx in do-ams3-nats-k8s-ams3 do-sgp1-nats-k8s-sgp1 do-sfo2-nats-k8s-sfo2; do
+for ctx in do-sfo2-nats-k8s-sfo2 do-ams3-nats-k8s-ams3; do
   echo "    - name: $ctx"
   echo "      urls:"
   for externalIP in `kubectl --context $ctx get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="ExternalIP")].address}'`; do
@@ -275,32 +274,11 @@ for ctx in do-ams3-nats-k8s-ams3 do-sgp1-nats-k8s-sgp1 do-sfo2-nats-k8s-sfo2; do
 done
 #+end_src
 
-#+begin_example
-    - name: do-ams3-nats-k8s-ams3
-      urls:
-        - nats://164.90.192.194:7522
-        - nats://164.90.192.226:7522
-        - nats://164.90.192.80:7522
-
-    - name: do-sgp1-nats-k8s-sgp1
-      urls:
-        - nats://188.166.236.158:7522
-        - nats://188.166.232.25:7522
-        - nats://188.166.236.155:7522
-
-    - name: do-sfo2-nats-k8s-sfo2
-      urls:
-        - nats://64.227.50.254:7522
-        - nats://64.227.54.26:7522
-        - nats://138.197.219.203:7522
-
-#+end_example
-
-** Super Cluster YAML
+** COMMENT Super Cluster YAML
 
 #+begin_src yaml :tangle conf/super-cluster.yaml
 nats:
-  image: nats:alpine
+  image: synadia/nats-server:nightly
 
   # Bind a host port from the host for each one of the pods.
   externalAccess: true
@@ -367,7 +345,7 @@ for ctx in do-ams3-nats-k8s-ams3  do-sfo2-nats-k8s-sfo2 do-sgp1-nats-k8s-sgp1; d
 done
 #+end_src
 
-** Confirm the setup
+** COMMENT Confirm the setup
 
 - Peek at the connect_urls and confirm that the routes are present.
 
@@ -387,8 +365,92 @@ Create a mock responder in AMS:
 nats-rply -s 164.90.192.226 -creds nsc/nkeys/creds/KO/KUBECON/chat-access.creds chat.req.access example
 #+end_src
 
+** Now upload the accounts
+
+Upload the accounts:
+
+#+begin_src sh
+nats-req -s tls://sfo.nats.chat:4222 -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep CHAT  | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/CHAT/CHAT.jwt)
+
+# FIXME: workaround to prevent colors matching in the line below.
+rm ./nsc/accounts/nsc.json
+
+nats-req -s tls://sfo.nats.chat:4222 -creds $NKEYS_PATH/creds/KO/SYS/sys.creds "\$SYS.REQ.ACCOUNT.$(nsc list accounts 2>&1 | grep ADMIN | awk '{print $4}').CLAIMS.UPDATE" $(cat ./nsc/accounts/nats/KO/accounts/ADMIN/ADMIN.jwt)
+#+end_src
+** 
+
 * COMMENT Using the System account
 
 #+begin_src sh
 nats-sub -s 188.166.236.158 -creds ./nsc/nkeys/creds/KO/SYS/sys.creds '>'
 #+end_src
+* Setting up external access for the NATS cluster
+
+** Deploying external-dns
+
+First deploy the external-dns component using the DigitalOcean provider:
+
+#+BEGIN_SRC sh
+echo '
+rbac:
+  create: true
+
+provider: digitalocean
+
+digitalocean:
+  apiToken: himitsu
+
+interval: "1m"
+
+policy: sync # or upsert-only
+' > k8s/external-dns.yaml
+
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm install external-dns bitnami/external-dns -f k8s/external-dns.yaml
+#+END_SRC
+
+** Create NodePort service to create A records for each server
+
+This =NodePort= is required in order to be able to expose the host ports.
+
+#+BEGIN_SRC yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-nodeport
+  labels:
+    app: nats
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: sfo.nats.chat
+spec:
+  type: NodePort
+  selector:
+    app: nats
+  externalTrafficPolicy: Local
+  ports:
+  - name: client
+    port: 4222
+    nodePort: 30222
+    targetPort: 4222
+  - name: websocket
+    port: 443
+    nodePort: 30223
+    targetPort: 443
+#+END_SRC
+
+This will make it possible to reach out to the NATS cluster by using the =sfo.nats.chat= domain:
+
+#+BEGIN_SRC 
+nslookup sfo.nats.chat
+Server:		2001:558:feed::1
+Address:	2001:558:feed::1#53
+
+Non-authoritative answer:
+Name:	sfo.nats.chat
+Address: 165.232.63.15
+Name:	sfo.nats.chat
+Address: 165.232.63.98
+Name:	sfo.nats.chat
+Address: 143.110.128.15
+#+END_SRC
+

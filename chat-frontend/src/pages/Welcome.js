@@ -13,6 +13,7 @@ import TextField from '@material-ui/core/TextField';
 import Typography from '@material-ui/core/Typography';
 
 const credsRequestSubject = 'chat.req.access';
+  const sc = StringCodec();
 
 function styles(theme) {
   return {
@@ -31,8 +32,6 @@ class Welcome extends React.Component {
       redirect: false,
     };
 
-    this.sc = StringCodec();
-
     this.changeUsername = this.changeUsername.bind(this);
     this.register = this.register.bind(this);
   }
@@ -48,16 +47,16 @@ class Welcome extends React.Component {
 
     connect({
       servers: [this.props.natsInfo.url],
-      authenticator: credsAuthenticator(this.sc.encode(this.props.natsInfo.bootstrapCreds)),
+      authenticator: credsAuthenticator(sc.encode(this.props.natsInfo.bootstrapCreds)),
       name: 'KUBECON NATS Chat WebUI',
     }).then((nc) => {
       return Promise.all([
         Promise.resolve(nc),
-        nc.request(credsRequestSubject, this.sc.encode(this.state.username)),
+        nc.request(credsRequestSubject, sc.encode(this.state.username)),
       ]);
     }).then(([nc, m]) => {
       return Promise.all([
-        Promise.resolve(this.sc.decode(m.data)),
+        Promise.resolve(sc.decode(m.data)),
         nc.close(),
       ]);
     }).then(([creds]) => {
@@ -65,7 +64,7 @@ class Welcome extends React.Component {
         Promise.resolve(creds),
         connect({
           servers: [this.props.natsInfo.url],
-          authenticator: credsAuthenticator(this.sc.encode(creds)),
+          authenticator: credsAuthenticator(sc.encode(creds)),
           name: 'KUBECON NATS Chat WebUI',
         }),
       ]);

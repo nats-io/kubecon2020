@@ -234,6 +234,7 @@ for firewall in `doctl compute firewall list | tail -n 3 | awk '{print $1}'`; do
   doctl compute firewall add-rules $firewall --inbound-rules protocol:tcp,ports:4222,address:0.0.0.0/0
   doctl compute firewall add-rules $firewall --inbound-rules protocol:tcp,ports:7422,address:0.0.0.0/0
   doctl compute firewall add-rules $firewall --inbound-rules protocol:tcp,ports:7522,address:0.0.0.0/0
+  doctl compute firewall add-rules $firewall --inbound-rules protocol:tcp,ports:443,address:0.0.0.0/0  
 done
 #+end_src
 

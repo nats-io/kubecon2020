@@ -58,12 +58,12 @@ class Welcome extends React.Component {
     }).then((nc) => {
       return Promise.all([
         Promise.resolve(nc),
-        // nc.request hits a NATS Server.
+        // nc.request hits a NATS Server Service.
         nc.request(credsRequestSubject, sc.encode(this.state.username)),
       ]);
-    }).then(([nc, m]) => {
+    }).then(([nc, msg]) => {
       return Promise.all([
-        Promise.resolve(sc.decode(m.data)),
+        Promise.resolve(sc.decode(msg.data)),
         // nc.close closes the original less restricted NATS Server user
         // account.
         nc.close(),

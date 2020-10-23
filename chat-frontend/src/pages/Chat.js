@@ -19,6 +19,8 @@ import ListItemText from '@material-ui/core/ListItemText';
 import SendIcon from '@material-ui/icons/Send';
 import TextField from '@material-ui/core/TextField';
 import Typography from '@material-ui/core/Typography';
+import FiberManualRecordIcon from '@material-ui/icons/FiberManualRecord';
+import ListItemIcon from '@material-ui/core/ListItemIcon';
 
 const msgsPrefix = 'chat.KUBECON';
 const postsPrefix = `${msgsPrefix}.posts`;
@@ -177,7 +179,10 @@ function ContextSidebar(props) {
           onClick={onClick(o.username)}
           classes={{root: classes.contextItem}}
         >
-          <ListItemText primary={`• ${o.username}`} />
+          <ListItemIcon>
+            <FiberManualRecordIcon style={{fontSize: 16, color: '#8dc63f'}} />
+          </ListItemIcon>
+          <ListItemText primary={o.username} />
         </ListItem>
       ));
     }

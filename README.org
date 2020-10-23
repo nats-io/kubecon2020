@@ -4,7 +4,7 @@
 
 Talk: https://sched.co/ekHe
 
-[[https://nats.io][NATS]] is high performance cloud native messaging system that allows you to build globally available and secure applications based on streams and services that are both fast and simple to operate. In this talk you will learn: how to get started with NATS streams and services, about the *NATS Adaptive Edge Architecture* to span clusters across different networks and clusters using leafnodes and gateway connections, followed by a deep dive into the latest NATS features as how to deploy in Kubernetes.
+[[https://nats.io][NATS]] is high performance cloud native messaging system that allows you to build globally available and secure applications based on streams and services that are both fast and simple to operate. In this talk you will learn: how to get started with NATS streams and services, about the *NATS Adaptive Edge Architecture* to span clusters across different networks and clusters using leafnodes and gateway connections, followed by a deep dive into the latest NATS features and how to deploy in Kubernetes with Helm.
 
 * Checkout the repo
 

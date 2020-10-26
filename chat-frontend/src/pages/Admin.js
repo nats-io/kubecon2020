@@ -5,13 +5,14 @@ import { DropzoneArea } from 'material-ui-dropzone';
 
 import { withStyles } from "@material-ui/core/styles";
 import Box from '@material-ui/core/Box';
+import Button from '@material-ui/core/Button';
 import Container from '@material-ui/core/Container';
 import Divider from '@material-ui/core/Divider';
-import Typography from '@material-ui/core/Typography';
 import List from '@material-ui/core/List';
 import ListItem from '@material-ui/core/ListItem';
 import ListItemText from '@material-ui/core/ListItemText';
-import Button from '@material-ui/core/Button';
+import Snackbar from '@material-ui/core/Snackbar';
+import Typography from '@material-ui/core/Typography';
 
 const sc = StringCodec();
 const revokeSubject = 'chat.req.revoke';
@@ -52,12 +53,19 @@ class Admin extends React.Component {
       nc: null,
       provisioned: {},
       authed: false,
+      err: '',
     };
 
     this.changeDropzone = this.changeDropzone.bind(this);
     this.handleProvisioned = this.handleProvisioned.bind(this);
     this.revokeAccess = this.revokeAccess.bind(this);
+    this.closeSnackbar = this.closeSnackbar.bind(this);
+
     this.credFileExts = [".creds", ".ncds"];
+    this.snackbarAnchor = {
+      vertical: 'bottom',
+      horizontal: 'left',
+    };
   }
 
   changeDropzone(files) {
@@ -95,16 +103,36 @@ class Admin extends React.Component {
           provisioned: JSON.parse(sc.decode(msg.data)),
           authed: true,
         });
-      }).catch(err => {
-        console.error('failed to connect to NATS:', err);
+      }).catch((err) => {
+        console.error(err);
+
+        let msg = 'Failed to connect to NATS';
+        if (err.message) {
+          msg = `${msg}: ${err.message}`;
+        } else if (err.name && err.name === 'NatsError') {
+          msg = `${msg}: trouble communicating with NATS`;
+        }
+        this.setState({err: msg});
       });
     });
     r.readAsText(files[0]);
   }
 
+  closeSnackbar(e) {
+    this.setState({err: ''});
+  }
+
   handleProvisioned(err, msg) {
     if (err) {
-      console.error('failed to receive message:', err);
+      console.error(err);
+
+      let msg = `Error receiving ${provisionUpdateSubject} message`;
+      if (err.message) {
+        msg = `${msg}: ${err.message}`;
+      } else if (err.name && err.name === 'NatsError') {
+        msg = `${msg}: trouble communicating with NATS`;
+      }
+      this.setState({err: msg});
       return;
     }
 
@@ -119,6 +147,16 @@ class Admin extends React.Component {
         this.setState({
           provisioned: JSON.parse(sc.decode(resp.data)),
         });
+      }).catch((err) => {
+        console.error(err);
+
+        let msg = `Failed to revoke ${username} access`;
+        if (err.message) {
+          msg = `${msg}: ${err.message}`;
+        } else if (err.name && err.name === 'NatsError') {
+          msg = `${msg}: trouble communicating with NATS`;
+        }
+        this.setState({err: msg});
       });
     };
   }
@@ -129,6 +167,13 @@ class Admin extends React.Component {
     if (!this.state.nc) {
       return (
         <Container maxWidth="md">
+          <Snackbar
+            anchorOrigin={this.snackbarAnchor}
+            autoHideDuration={6000}
+            open={this.state.err !== ''}
+            message={this.state.err}
+            onClose={this.closeSnackbar}
+          />
           <Header classes={classes} />
           <Box color="white" mb={3}>
             <Typography variant="body1">
@@ -182,6 +227,13 @@ class Admin extends React.Component {
 
     return (
       <Container maxWidth="md">
+        <Snackbar
+          anchorOrigin={this.snackbarAnchor}
+          autoHideDuration={6000}
+          open={this.state.err !== ''}
+          message={this.state.err}
+          onClose={this.closeSnackbar}
+        />
         <Header classes={classes} />
         {users}
       </Container>

@@ -252,6 +252,7 @@ class Chat extends React.Component {
         [chanNats]: [],
       },
       online: {},
+      intervalId: null,
     };
 
     this.user = {name: '', creds: '', seed: '', publicKey: ''};
@@ -292,8 +293,6 @@ class Chat extends React.Component {
       authenticator: credsAuthenticator(sc.encode(this.user.creds)),
       name: 'KUBECON NATS Chat WebUI',
     }).then((nc) => {
-      this.setState({nc});
-
       // Setup NATS Streams.
       // Listen for messages on KUBECON channel.
       nc.subscribe(`${postsPrefix}.${chanKubecon}`, {
@@ -319,7 +318,7 @@ class Chat extends React.Component {
 
       // Broadcast my heartbeats to everyone else.
       nc.publish(onlineStatus, sc.encode(JSON.stringify(this.getOnlineJwt())));
-      window.setInterval(() => {
+      const intervalId = window.setInterval(() => {
         nc.publish(onlineStatus, sc.encode(JSON.stringify(this.getOnlineJwt())));
       }, 30000);
 
@@ -328,12 +327,27 @@ class Chat extends React.Component {
       nc.closed().then((err) => {
         localStorage.removeItem('natschat.user.name');
         localStorage.removeItem('natschat.user.creds');
-        // Redirect back to Welcome page.
-        this.setState({redirect: true});
+
+        if (this.state.redirect === false) {
+          localStorage.setItem('natschat.revoked', true);
+          // Redirect back to Welcome page.
+          this.setState({redirect: true});
+        }
       });
+
+      this.setState({nc, intervalId});
     }).catch(err => {
       console.error('failed to connect to NATS:', err);
     });
+  }
+
+  componentWillUnmount() {
+    if (this.state.intervalId) {
+      clearInterval(this.state.intervalId);
+    }
+    if (this.state.nc) {
+      this.state.nc.close();
+    }
   }
 
   getOnlineJwt() {

@@ -13,6 +13,7 @@ import Button from '@material-ui/core/Button';
 import Container from '@material-ui/core/Container';
 import Grid from '@material-ui/core/Grid';
 import Paper from '@material-ui/core/Paper';
+import Snackbar from '@material-ui/core/Snackbar';
 import TextField from '@material-ui/core/TextField';
 import Typography from '@material-ui/core/Typography';
 
@@ -34,16 +35,34 @@ class Welcome extends React.Component {
     this.state = {
       username: '',
       redirect: false,
+      err: '',
     };
 
     this.changeUsername = this.changeUsername.bind(this);
+    this.closeSnackbar = this.closeSnackbar.bind(this);
     this.register = this.register.bind(this);
+
+    this.snackbarAnchor = {
+      vertical: 'bottom',
+      horizontal: 'left',
+    };
+  }
+
+  componentDidMount() {
+    if (localStorage.getItem('natschat.revoked') !== null) {
+      localStorage.removeItem('natschat.revoked');
+      this.setState({err: 'Account has been revoked'});
+    }
   }
 
   changeUsername(e) {
     this.setState({
       username: e.currentTarget.value,
     });
+  }
+
+  closeSnackbar(e) {
+    this.setState({err: ''});
   }
 
   register(e) {
@@ -69,6 +88,10 @@ class Welcome extends React.Component {
         nc.close(),
       ]);
     }).then(([creds]) => {
+      if (creds.startsWith('-ERR ')) {
+        throw new Error(creds.slice('-ERR '.length));
+      }
+
       return Promise.all([
         Promise.resolve(creds),
         // reconnect with full real creds.
@@ -84,12 +107,17 @@ class Welcome extends React.Component {
       localStorage.setItem('natschat.user.name', this.state.username);
       localStorage.setItem('natschat.user.creds', creds);
       this.setState({redirect: true});
-    }).catch(err => {
-      if (err instanceof TypeError) {
-        console.log("unable to register name");
-      } else {
-        console.error('failed register user:', err);
+    }).catch((err) => {
+      console.error(err);
+
+      let msg = 'Failed to register user';
+      if (err.message) {
+        msg = `${msg}: ${err.message}`;
+      } else if (err.name && err.name === 'NatsError') {
+        msg = `${msg}: trouble communicating with NATS`;
       }
+
+      this.setState({err: msg});
     });
   }
 
@@ -101,6 +129,14 @@ class Welcome extends React.Component {
     const classes = this.props.classes;
     return (
       <Container maxWidth="md">
+        <Snackbar
+          anchorOrigin={this.snackbarAnchor}
+          autoHideDuration={6000}
+          open={this.state.err !== ''}
+          message={this.state.err}
+          onClose={this.closeSnackbar}
+        />
+
         <Box mt={12} />
         <Grid container>
           <Grid item xs={6}>

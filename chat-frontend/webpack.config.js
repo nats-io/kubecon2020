@@ -17,6 +17,14 @@ module.exports = {
       NATS_SERVER_URL: JSON.stringify(process.env.NATS_SERVER_URL),
       NATS_BOOTSTRAP_CREDS: JSON.stringify(process.env.NATS_BOOTSTRAP_CREDS),
     }),
+    new webpack.ProvidePlugin({
+      process: 'process/browser',
+    }),
   ],
+  resolve: {
+    fallback: {
+      util: require.resolve('util/'),
+    },
+  },
 };
 

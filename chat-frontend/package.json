@@ -18,12 +18,17 @@
   "dependencies": {
     "@material-ui/core": "^4.11.0",
     "@material-ui/icons": "^4.9.1",
+    "base64url": "^3.0.1",
+    "buffer": "^5.7.0",
     "jwt-decode": "^3.0.0",
     "material-ui-dropzone": "^3.5.0",
     "nats.ws": "^1.0.0-112",
+    "nkeys.js": "^1.0.0-6",
+    "process": "^0.11.10",
     "react": "^16.14.0",
     "react-dom": "^16.14.0",
     "react-router-dom": "^5.2.0",
+    "util": "^0.12.3",
     "uuid": "^8.3.1"
   }
 }

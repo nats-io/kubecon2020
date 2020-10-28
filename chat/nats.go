@@ -14,7 +14,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -112,24 +111,17 @@ func (s *state) sendOnlineStatus(first bool) {
 }
 
 func (s *state) processUserUpdate(m *nats.Msg) {
-	//userClaim, err := jwt.DecodeGeneric(string(m.Data))
-	//if err != nil {
-	//	s.logErr("-ERR Received a bad user update: %v", err)
-	//	return
-	//}
-	//vr := jwt.CreateValidationResults()
-	//userClaim.Validate(vr)
-	//if vr.IsBlocking(true) {
-	//	s.logErr("-ERR Blocking issues for user update:%+v", vr)
-	//	return
-	//}
-
-	var post *jwt.GenericClaims
-	if err := json.Unmarshal([]byte(m.Data), &post); err != nil {
-		s.logErr("-ERR %s", err)
+	userClaim, err := jwt.DecodeGeneric(string(m.Data))
+	if err != nil {
+		s.logErr("-ERR Received a bad user update: %v", err)
 		return
 	}
-	userClaim := &postClaim{post}
+	vr := jwt.CreateValidationResults()
+	userClaim.Validate(vr)
+	if vr.IsBlocking(true) {
+		s.logErr("-ERR Blocking issues for user update:%+v", vr)
+		return
+	}
 
 	s.Lock()
 	defer s.Unlock()
@@ -189,21 +181,15 @@ func (s *state) sendPost(m string) *postClaim {
 }
 
 func (s *state) checkPostClaim(claim string) *postClaim {
-	//post, err := jwt.DecodeGeneric(claim)
-	//if err != nil {
-	//	s.logErr("-ERR Received a bad post: %v", err)
-	//	return nil
-	//}
-	//vr := jwt.CreateValidationResults()
-	//post.Validate(vr)
-	//if vr.IsBlocking(true) {
-	//	s.logErr("-ERR Blocking issues for post:%+v", vr)
-	//	return nil
-	//}
-
-	var post *jwt.GenericClaims
-	if err := json.Unmarshal([]byte(claim), &post); err != nil {
-		s.logErr("-ERR %s", err)
+	post, err := jwt.DecodeGeneric(claim)
+	if err != nil {
+		s.logErr("-ERR Received a bad post: %v", err)
+		return nil
+	}
+	vr := jwt.CreateValidationResults()
+	post.Validate(vr)
+	if vr.IsBlocking(true) {
+		s.logErr("-ERR Blocking issues for post:%+v", vr)
 		return nil
 	}
 

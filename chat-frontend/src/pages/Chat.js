@@ -3,7 +3,7 @@ import { Redirect } from 'react-router-dom';
 
 import { connect, StringCodec, credsAuthenticator } from 'nats.ws';
 import { v4 } from 'uuid';
-import jwtDecode from 'jwt-decode';
+import { encodeSignJwt, decodeJwt, decodeVerifyJwt } from '../njwt';
 
 import { withStyles } from "@material-ui/core/styles";
 import Box from '@material-ui/core/Box';
@@ -255,22 +255,6 @@ class Chat extends React.Component {
       intervalId: null,
     };
 
-    this.user = {name: '', creds: '', seed: '', publicKey: ''};
-    if (localStorage.getItem('natschat.user.creds')) {
-      this.user.creds = localStorage.getItem('natschat.user.creds');
-
-      const lines = this.user.creds.split('\n');
-      for (let i = 0; i < lines.length; i++) {
-        if (lines[i].startsWith('-----BEGIN USER PRIVATE KEY')) {
-          this.user.seed = lines[i+1];
-        } else if (lines[i].startsWith('-----BEGIN NATS USER JWT')) {
-          const jwt = jwtDecode(lines[i+1]);
-          this.user.publicKey = jwt.sub;
-          this.user.name = jwt.name;
-        }
-      }
-    }
-
     this.changeMessageCompose = this.changeMessageCompose.bind(this);
     this.handleChanGeneral = this.handleChanGeneral.bind(this);
     this.handleChanKubecon = this.handleChanKubecon.bind(this);
@@ -284,6 +268,35 @@ class Chat extends React.Component {
     this.handleSelfMessages = this.handleSelfMessages.bind(this);
     this.getOnlineJwt = this.getOnlineJwt.bind(this);
     this.logout = this.logout.bind(this);
+    this.parseUserInfo = this.parseUserInfo.bind(this);
+
+    this.user = this.parseUserInfo(localStorage.getItem('natschat.user.creds'));
+  }
+
+  parseUserInfo(creds) {
+    const user = {name: '', creds: '', seed: '', publicKey: ''};
+    if (!creds) {
+      return user;
+    }
+    user.creds = creds;
+
+    const lines = user.creds.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith('-----BEGIN USER NKEY SEED')) {
+        user.seed = lines[i+1];
+      }
+      if (lines[i].startsWith('-----BEGIN USER PRIVATE KEY')) {
+        user.seed = lines[i+1];
+      }
+
+      if (lines[i].startsWith('-----BEGIN NATS USER JWT')) {
+        const jwt = decodeJwt(lines[i+1]);
+        user.publicKey = jwt.sub;
+        user.name = jwt.name;
+      }
+    }
+
+    return user;
   }
 
   componentDidMount() {
@@ -317,9 +330,9 @@ class Chat extends React.Component {
 
 
       // Broadcast my heartbeats to everyone else.
-      nc.publish(onlineStatus, sc.encode(JSON.stringify(this.getOnlineJwt())));
+      nc.publish(onlineStatus, sc.encode(this.getOnlineJwt()));
       const intervalId = window.setInterval(() => {
-        nc.publish(onlineStatus, sc.encode(JSON.stringify(this.getOnlineJwt())));
+        nc.publish(onlineStatus, sc.encode(this.getOnlineJwt()));
       }, 30000);
 
 
@@ -357,7 +370,7 @@ class Chat extends React.Component {
     later.setSeconds(later.getSeconds() + 60);
     const unixLater = Math.floor((+ later) / 1000);
 
-    return {
+    return encodeSignJwt(this.user.seed, {
       exp: unixLater,
       jti: v4(),
       iat: unixNow,
@@ -368,7 +381,7 @@ class Chat extends React.Component {
         type: 'chat-online',
         version: 2,
       },
-    };
+    });
   }
 
   logout() {
@@ -413,14 +426,7 @@ class Chat extends React.Component {
       return;
     }
 
-    const data = sc.decode(msg.data);
-    let jwt = {};
-    if (data.startsWith("{")) {
-      jwt = JSON.parse(data);
-    } else {
-      jwt = jwtDecode(data);
-    }
-
+    const jwt = decodeVerifyJwt(sc.decode(msg.data));
     this.updateMessages(chanGeneral, jwt);
   }
 
@@ -430,14 +436,7 @@ class Chat extends React.Component {
       return;
     }
 
-    const data = sc.decode(msg.data);
-    let jwt = {};
-    if (data.startsWith("{")) {
-      jwt = JSON.parse(data);
-    } else {
-      jwt = jwtDecode(data);
-    }
-
+    const jwt = decodeVerifyJwt(sc.decode(msg.data));
     this.updateMessages(chanKubecon, jwt);
   }
 
@@ -447,14 +446,7 @@ class Chat extends React.Component {
       return;
     }
 
-    const data = sc.decode(msg.data);
-    let jwt = {};
-    if (data.startsWith("{")) {
-      jwt = JSON.parse(data);
-    } else {
-      jwt = jwtDecode(data);
-    }
-
+    const jwt = decodeVerifyJwt(sc.decode(msg.data));
     this.updateMessages(chanNats, jwt);
   }
 
@@ -487,7 +479,7 @@ class Chat extends React.Component {
   }
 
   sendChatPost(channel, msg) {
-    const jwt = {
+    const jwt = encodeSignJwt(this.user.seed, {
       jti: v4(),
       iss: this.user.publicKey,
       iat: Math.floor((+ new Date()) / 1000),
@@ -498,9 +490,9 @@ class Chat extends React.Component {
         type: "chat-post",
         version: 2,
       },
-    };
+    });
 
-    this.state.nc.publish(`${postsPrefix}.${channel}`, sc.encode(JSON.stringify(jwt)));
+    this.state.nc.publish(`${postsPrefix}.${channel}`, sc.encode(jwt));
     this.setState({messageCompose: ''});
   }
 
@@ -513,10 +505,10 @@ class Chat extends React.Component {
       }
     }
     if (toPublicKey === '') {
-      throw new Error(`no public key for user ${username}`);
+      throw new Error(`failed to send DM: no public key for user ${username}`);
     }
 
-    const jwt = {
+    const payload = {
       jti: v4(),
       iat: Math.floor((+ new Date()) / 1000),
       iss: this.user.publicKey,
@@ -529,9 +521,13 @@ class Chat extends React.Component {
       },
     };
 
-    this.state.nc.publish(`${dmsPrefix}.${toPublicKey}`, sc.encode(JSON.stringify(jwt)));
+    const jwt = encodeSignJwt(this.user.seed, payload);
+
+    this.state.nc.publish(`${dmsPrefix}.${toPublicKey}`, sc.encode(jwt));
     this.setState({messageCompose: ''}, () => {
-      this.updateMessages(username, jwt);
+      if (this.user.name !== username) {
+        this.updateMessages(username, payload);
+      }
     });
   }
 
@@ -542,13 +538,7 @@ class Chat extends React.Component {
   }
 
   handleOnline(err, msg) {
-    const data = sc.decode(msg.data);
-    let jwt = {};
-    if (data.startsWith("{")) {
-      jwt = JSON.parse(data);
-    } else {
-      jwt = jwtDecode(data);
-    }
+    const jwt = decodeVerifyJwt(sc.decode(msg.data));
 
     this.setState(prev => {
       let online = {};
@@ -573,14 +563,7 @@ class Chat extends React.Component {
   }
 
   handleSelfMessages(err, msg) {
-    const data = sc.decode(msg.data);
-    let jwt = {};
-    if (data.startsWith("{")) {
-      jwt = JSON.parse(data);
-    } else {
-      jwt = jwtDecode(data);
-    }
-
+    const jwt = decodeVerifyJwt(sc.decode(msg.data));
     this.updateMessages(jwt.name, jwt);
   }
 
